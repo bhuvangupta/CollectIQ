@@ -155,7 +155,11 @@ class VoicePipeline:
             user_text = await self._transcribe(wav_audio)
 
             if not user_text or not user_text.strip():
-                return PipelineResult(is_processing=False)
+                # For testing: use a default phrase if audio couldn't be transcribed
+                if os.getenv("STT_TEST_FALLBACK"):
+                    user_text = "Haan, main sun raha hoon"
+                else:
+                    return PipelineResult(is_processing=False)
 
             # Add to conversation history
             self.conversation_history.append({
