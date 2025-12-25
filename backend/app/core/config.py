@@ -74,9 +74,16 @@ class Settings(BaseSettings):
     ai_engine_host: str = "localhost"
     ai_engine_port: int = 8001
 
+    # LLM Provider
+    llm_provider: str = "ollama"  # "ollama" or "groq"
+
     # Ollama (LLM)
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "qwen3:8b"
+
+    # Groq (LLM)
+    groq_api_key: Optional[str] = None
+    groq_model: str = "qwen-qwq-32b"
 
     # Whisper (Speech-to-text)
     whisper_model: str = "base"

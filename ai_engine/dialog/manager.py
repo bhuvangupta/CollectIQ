@@ -1,7 +1,5 @@
-import os
 import re
 from typing import Dict, Any, List, Optional
-import httpx
 
 from .prompts import (
     COLLECTION_SYSTEM_PROMPT,
@@ -9,14 +7,14 @@ from .prompts import (
     SENTIMENT_INDICATORS,
 )
 from .guardrails import ComplianceChecker
+from ..llm import get_llm_provider, LLMProvider
 
 
 class DialogManager:
-    """Dialog manager for collection conversations using Ollama/Qwen3."""
+    """Dialog manager for collection conversations using configurable LLM provider."""
 
     def __init__(self):
-        self.ollama_url = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-        self.model = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+        self.llm: LLMProvider = get_llm_provider()
         self.compliance_checker = ComplianceChecker()
 
     async def generate_response(
@@ -36,7 +34,7 @@ class DialogManager:
             language="Hindi" if language == "hi" else "English"
         )
 
-        # Format conversation for Ollama
+        # Format conversation for LLM
         messages = [{"role": "system", "content": system_prompt}]
         for msg in conversation_history:
             messages.append({
@@ -45,46 +43,30 @@ class DialogManager:
             })
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    f"{self.ollama_url}/api/chat",
-                    json={
-                        "model": self.model,
-                        "messages": messages,
-                        "stream": False,
-                        "options": {
-                            "temperature": 0.7,
-                            "top_p": 0.9,
-                        }
-                    }
+            ai_response = await self.llm.chat(messages, temperature=0.7, top_p=0.9)
+
+            # Check compliance
+            compliance_check = self.compliance_checker.check(ai_response)
+            if not compliance_check["is_compliant"]:
+                # Regenerate with stricter prompt
+                ai_response = await self._regenerate_compliant(
+                    messages, compliance_check["issues"]
                 )
-                response.raise_for_status()
-                result = response.json()
 
-                ai_response = result.get("message", {}).get("content", "")
+            # Extract entities and actions
+            entities = self._extract_entities(ai_response, language)
+            action = self._determine_action(ai_response, conversation_history)
+            should_end = self._should_end_conversation(ai_response, action)
 
-                # Check compliance
-                compliance_check = self.compliance_checker.check(ai_response)
-                if not compliance_check["is_compliant"]:
-                    # Regenerate with stricter prompt
-                    ai_response = await self._regenerate_compliant(
-                        messages, compliance_check["issues"]
-                    )
-
-                # Extract entities and actions
-                entities = self._extract_entities(ai_response, language)
-                action = self._determine_action(ai_response, conversation_history)
-                should_end = self._should_end_conversation(ai_response, action)
-
-                return {
-                    "response": ai_response,
-                    "action": action,
-                    "entities": entities,
-                    "should_end": should_end
-                }
+            return {
+                "response": ai_response,
+                "action": action,
+                "entities": entities,
+                "should_end": should_end
+            }
 
         except Exception as e:
-            print(f"Ollama error: {e}")
+            print(f"LLM error: {e}")
             # Return fallback response
             return self._fallback_response(context, language)
 
@@ -99,19 +81,7 @@ class DialogManager:
         messages.append({"role": "system", "content": reminder})
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    f"{self.ollama_url}/api/chat",
-                    json={
-                        "model": self.model,
-                        "messages": messages,
-                        "stream": False,
-                        "options": {"temperature": 0.5}
-                    }
-                )
-                response.raise_for_status()
-                result = response.json()
-                return result.get("message", {}).get("content", "")
+            return await self.llm.chat(messages, temperature=0.5)
         except Exception:
             return "I apologize, but I need to transfer you to a human agent. Please hold."
 
@@ -229,27 +199,14 @@ Provide:
 """
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    f"{self.ollama_url}/api/generate",
-                    json={
-                        "model": self.model,
-                        "prompt": prompt,
-                        "stream": False
-                    }
-                )
-                response.raise_for_status()
-                result = response.json()
+            text = await self.llm.generate(prompt)
 
-                # Parse the response
-                text = result.get("response", "")
-
-                return {
-                    "summary": text[:500],  # First 500 chars as summary
-                    "key_points": self._extract_bullet_points(text),
-                    "action_items": [],
-                    "entities": self._extract_entities(transcript, language)
-                }
+            return {
+                "summary": text[:500],  # First 500 chars as summary
+                "key_points": self._extract_bullet_points(text),
+                "action_items": [],
+                "entities": self._extract_entities(transcript, language)
+            }
 
         except Exception as e:
             print(f"Summarization error: {e}")

@@ -6,7 +6,7 @@ An intelligent loan collection platform for Indian financial institutions, featu
 
 - **AI Voice Bot**: Automated collection calls using speech recognition (Whisper) and text-to-speech (Coqui XTTS)
 - **Multi-Language Support**: Hindi and English support for voice and text
-- **Intelligent Dialog**: Context-aware conversations using Qwen3 8B via Ollama
+- **Intelligent Dialog**: Context-aware conversations using configurable LLM (Ollama or Groq)
 - **Multi-Channel Communication**: Phone calls, SMS, and WhatsApp integration
 - **Campaign Management**: Bulk outreach campaigns with targeting and scheduling
 - **Case Management**: Assign, track, and manage collection cases
@@ -33,7 +33,9 @@ An intelligent loan collection platform for Indian financial institutions, featu
 ### AI/ML
 - OpenAI Whisper (large-v3) for speech-to-text
 - Edge TTS (Microsoft) for text-to-speech (supports 9 Indian languages)
-- Ollama with Qwen3 8B for dialog management
+- Configurable LLM provider for dialog management:
+  - **Ollama** (default): Local inference with Qwen3 8B
+  - **Groq**: Cloud API with Qwen QwQ 32B
 - Custom compliance checking
 
 ## Quick Start
@@ -250,8 +252,11 @@ Key environment variables (see `.env.example`):
 | `DATABASE_URL` | PostgreSQL connection | `postgresql+asyncpg://...` |
 | `REDIS_URL` | Redis connection | `redis://localhost:6379/0` |
 | `SECRET_KEY` | JWT secret key | (generated) |
+| `LLM_PROVIDER` | LLM provider to use | `ollama` |
 | `OLLAMA_HOST` | Ollama server URL | `http://localhost:11434` |
-| `OLLAMA_MODEL` | LLM model to use | `qwen3:8b` |
+| `OLLAMA_MODEL` | Ollama model to use | `qwen3:8b` |
+| `GROQ_API_KEY` | Groq API key (required if using Groq) | - |
+| `GROQ_MODEL` | Groq model to use | `qwen-qwq-32b` |
 
 ## Compliance
 

@@ -12,8 +12,9 @@ transformers>=4.36.0
 # Text-to-Speech (edge-tts supports Hindi/English, works with Python 3.12)
 edge-tts>=6.1.0
 
-# Ollama client
+# LLM Providers
 ollama>=0.1.6
+groq>=0.4.0
 
 # Audio processing
 pydub>=0.25.1
