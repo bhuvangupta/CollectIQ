@@ -1,21 +1,26 @@
 #!/bin/bash
 # Start only the telephony service
 
-set -e
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Load environment variables
 if [ -f "$PROJECT_ROOT/.env" ]; then
-    export $(grep -v '^#' "$PROJECT_ROOT/.env" | xargs)
+    set -a
+    source "$PROJECT_ROOT/.env"
+    set +a
 fi
 
 # Activate virtual environment
-source "$PROJECT_ROOT/venv/bin/activate"
+if [ -f "$PROJECT_ROOT/venv/bin/activate" ]; then
+    source "$PROJECT_ROOT/venv/bin/activate"
+else
+    echo "Error: Virtual environment not found at $PROJECT_ROOT/venv"
+    exit 1
+fi
 
 echo "Starting Telephony Service on http://localhost:8002"
 echo ""
 
 cd "$PROJECT_ROOT/telephony"
-uvicorn main:app --host 0.0.0.0 --port 8002 --reload
+exec uvicorn main:app --host 0.0.0.0 --port 8002 --reload

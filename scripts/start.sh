@@ -1,8 +1,6 @@
 #!/bin/bash
 # Start all services for AI Collection Platform
 
-set -e
-
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -14,7 +12,9 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Load environment variables
 if [ -f "$PROJECT_ROOT/.env" ]; then
-    export $(grep -v '^#' "$PROJECT_ROOT/.env" | xargs)
+    set -a
+    source "$PROJECT_ROOT/.env"
+    set +a
 fi
 
 # Create logs directory
@@ -45,7 +45,12 @@ echo "Starting AI Collection Platform"
 echo "========================================"
 
 # Activate virtual environment
-source "$PROJECT_ROOT/venv/bin/activate"
+if [ -f "$PROJECT_ROOT/venv/bin/activate" ]; then
+    source "$PROJECT_ROOT/venv/bin/activate"
+else
+    echo -e "${RED}Error: Virtual environment not found at $PROJECT_ROOT/venv${NC}"
+    exit 1
+fi
 
 # Check Redis
 echo -e "\n${YELLOW}Checking Redis...${NC}"

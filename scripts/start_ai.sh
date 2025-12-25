@@ -1,25 +1,28 @@
 #!/bin/bash
 # Start only the AI engine
 
-set -e
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Load environment variables
 if [ -f "$PROJECT_ROOT/.env" ]; then
-    export $(grep -v '^#' "$PROJECT_ROOT/.env" | xargs)
+    set -a
+    source "$PROJECT_ROOT/.env"
+    set +a
 fi
 
-# Activate AI engine's virtual environment
-if [ -d "$PROJECT_ROOT/ai_engine/venv" ]; then
-    source "$PROJECT_ROOT/ai_engine/venv/bin/activate"
+# AI engine has its own venv
+if [ -f "$PROJECT_ROOT/ai_engine/venv/bin/uvicorn" ]; then
+    VENV_PATH="$PROJECT_ROOT/ai_engine/venv"
+elif [ -f "$PROJECT_ROOT/venv/bin/uvicorn" ]; then
+    VENV_PATH="$PROJECT_ROOT/venv"
 else
-    source "$PROJECT_ROOT/venv/bin/activate"
+    echo "Error: uvicorn not found"
+    exit 1
 fi
 
 echo "Starting AI Engine on http://localhost:8001"
 echo ""
 
 cd "$PROJECT_ROOT/ai_engine"
-uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+exec "$VENV_PATH/bin/uvicorn" main:app --host 0.0.0.0 --port 8001 --reload
