@@ -21,11 +21,16 @@ async def call_status_webhook(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db)
 ):
-    """Handle call status webhook from telephony provider."""
+    """Handle call status webhook from telephony provider.
+
+    Accepts data from both telephony service and AI voice pipeline.
+    Stores transcripts, summaries, entities, and creates call recordings.
+    """
     data = await request.json()
 
     call_sid = data.get("CallSid") or data.get("call_sid")
     call_status = data.get("Status") or data.get("status")
+    event_type = data.get("type", "call_status")
 
     if not call_sid:
         raise HTTPException(
@@ -44,33 +49,37 @@ async def call_status_webhook(
         return {"status": "ignored", "reason": "call_sid not found"}
 
     # Update status
-    status_map = {
-        "ringing": "ringing",
-        "in-progress": "in_progress",
-        "completed": "completed",
-        "busy": "busy",
-        "no-answer": "no_answer",
-        "failed": "failed",
-        "canceled": "failed"
-    }
-    comm.status = status_map.get(call_status.lower(), call_status)
+    if call_status:
+        status_map = {
+            "ringing": "ringing",
+            "in-progress": "in_progress",
+            "completed": "completed",
+            "busy": "busy",
+            "no-answer": "no_answer",
+            "failed": "failed",
+            "canceled": "failed"
+        }
+        comm.status = status_map.get(call_status.lower(), call_status)
 
     # Update timing
-    if call_status.lower() == "in-progress":
+    if call_status and call_status.lower() == "in-progress":
         comm.connected_at = datetime.utcnow()
-    elif call_status.lower() in ["completed", "busy", "no-answer", "failed"]:
+    elif call_status and call_status.lower() in ["completed", "busy", "no-answer", "failed"]:
         comm.ended_at = datetime.utcnow()
         if comm.connected_at:
             comm.duration_seconds = int((comm.ended_at - comm.connected_at).total_seconds())
+
+    # Handle duration from webhook
+    duration = data.get("duration")
+    if duration:
+        comm.duration_seconds = int(duration)
 
     # Handle recording URL if provided
     recording_url = data.get("RecordingUrl") or data.get("recording_url")
     if recording_url:
         comm.recording_url = recording_url
-        # TODO: Queue transcription task
-        # background_tasks.add_task(process_recording, comm.id, recording_url)
 
-    # Handle transcript if provided
+    # Handle transcript if provided (from AI voice pipeline)
     transcript = data.get("transcript")
     if transcript:
         # Convert list of conversation turns to text
@@ -79,14 +88,47 @@ async def call_status_webhook(
                 f"{turn.get('role', 'Unknown')}: {turn.get('content', '')}"
                 for turn in transcript
             ])
+            transcript_segments = transcript
         else:
             transcript_text = str(transcript)
+            transcript_segments = None
         comm.transcript = transcript_text
+
+        # Create or update CallRecording with transcript data
+        if transcript_segments:
+            await _save_call_recording(
+                db, comm, transcript_segments, data.get("summary"),
+                data.get("entities"), data.get("key_points")
+            )
+
+    # Handle AI-specific data
+    summary = data.get("summary")
+    if summary:
+        comm.summary = summary
+
+    entities = data.get("entities")
+    if entities:
+        # Store in provider_metadata for now
+        metadata = comm.provider_metadata or {}
+        metadata["entities"] = entities
+        comm.provider_metadata = metadata
 
     # Handle outcome if provided
     outcome = data.get("outcome")
     if outcome:
         comm.outcome = outcome
+
+    # Mark as AI-handled if this was an AI call
+    if data.get("is_ai_handled") or event_type == "call_complete":
+        comm.is_ai_handled = True
+
+    # Handle campaign info
+    campaign_id = data.get("campaign_id")
+    if campaign_id and not comm.campaign_id:
+        try:
+            comm.campaign_id = UUID(campaign_id)
+        except ValueError:
+            pass
 
     await db.commit()
 
@@ -188,6 +230,54 @@ async def get_call_status(
         "ended_at": comm.ended_at.isoformat() if comm.ended_at else None,
         "is_ai_handled": comm.is_ai_handled
     }
+
+
+@router.get("/call/{call_sid}/transcript")
+async def get_call_transcript(
+    call_sid: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get call transcript and AI analysis."""
+    result = await db.execute(
+        select(Communication).where(
+            Communication.call_sid == call_sid,
+            Communication.organization_id == current_user.organization_id
+        )
+    )
+    comm = result.scalar_one_or_none()
+
+    if not comm:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Call not found"
+        )
+
+    # Get associated recording if exists
+    recording_result = await db.execute(
+        select(CallRecording).where(CallRecording.communication_id == comm.id)
+    )
+    recording = recording_result.scalar_one_or_none()
+
+    response = {
+        "call_sid": call_sid,
+        "transcript": comm.transcript,
+        "summary": comm.summary,
+        "outcome": comm.outcome,
+        "is_ai_handled": comm.is_ai_handled,
+        "duration_seconds": comm.duration_seconds
+    }
+
+    if recording:
+        response.update({
+            "segments": recording.transcription_segments,
+            "ai_summary": recording.ai_summary,
+            "key_points": recording.key_points,
+            "entities": recording.entities_mentioned,
+            "compliance_flags": recording.compliance_flags
+        })
+
+    return response
 
 
 @router.post("/call/{call_sid}/hangup")
@@ -330,3 +420,54 @@ async def get_whatsapp_templates(
         }
     ]
     return {"templates": templates}
+
+
+async def _save_call_recording(
+    db: AsyncSession,
+    comm: Communication,
+    transcript_segments: list,
+    summary: str = None,
+    entities: dict = None,
+    key_points: list = None
+):
+    """Save or update call recording with transcript data.
+
+    Args:
+        db: Database session
+        comm: Communication record
+        transcript_segments: List of conversation turns
+        summary: AI-generated summary
+        entities: Extracted entities (amounts, dates, promises)
+        key_points: Key points from conversation
+    """
+    # Check if recording already exists
+    result = await db.execute(
+        select(CallRecording).where(CallRecording.communication_id == comm.id)
+    )
+    recording = result.scalar_one_or_none()
+
+    if not recording:
+        # Create new recording
+        recording = CallRecording(
+            communication_id=comm.id,
+            file_path=comm.recording_url or f"transcripts/{comm.id}.json",
+            duration_seconds=comm.duration_seconds or 0,
+            format="json",
+            transcription_status="completed"
+        )
+        db.add(recording)
+
+    # Update transcription data
+    recording.transcription_text = comm.transcript
+    recording.transcription_segments = transcript_segments
+    recording.transcription_language = "hi"  # Default to Hindi/Hinglish
+
+    # Update AI analysis
+    if summary:
+        recording.ai_summary = summary
+    if key_points:
+        recording.key_points = key_points
+    if entities:
+        recording.entities_mentioned = entities
+
+    await db.flush()
