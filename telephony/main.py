@@ -49,13 +49,28 @@ ws_manager = ConnectionManager()
 # Request/Response Models
 class InitiateCallRequest(BaseModel):
     """Request to initiate an outbound call."""
-    phone_number: str
+    phone_number: Optional[str] = None
+    to_number: Optional[str] = None  # Alias for phone_number (from campaign tasks)
     caller_id: str = "+911234567890"
-    borrower_id: str
-    case_id: str
+    borrower_id: Optional[str] = None
+    case_id: Optional[str] = None
     campaign_id: Optional[str] = None
+    campaign_borrower_id: Optional[str] = None
     language: str = "hi"
     callback_url: Optional[str] = None
+    use_ai: bool = False  # Whether to use AI voice pipeline
+
+    # Borrower context for AI (optional, fetched from backend if not provided)
+    borrower_name: Optional[str] = None
+    outstanding_amount: Optional[float] = None
+    emi_amount: Optional[float] = None
+    dpd: Optional[int] = None
+    loan_type: Optional[str] = None
+
+    @property
+    def target_phone(self) -> str:
+        """Get the target phone number from either field."""
+        return self.phone_number or self.to_number or ""
 
 
 class CallResponse(BaseModel):
@@ -119,30 +134,50 @@ async def health_check():
 @app.post("/calls/initiate", response_model=CallResponse)
 async def initiate_call(request: InitiateCallRequest):
     """Initiate an outbound call."""
+    phone = request.target_phone
+    if not phone:
+        raise HTTPException(status_code=400, detail="phone_number or to_number required")
+
     try:
+        # Build AI context if use_ai is enabled
+        ai_context = None
+        if request.use_ai:
+            ai_context = {
+                "borrower_name": request.borrower_name or "Customer",
+                "outstanding_amount": request.outstanding_amount or 0,
+                "emi_amount": request.emi_amount or 0,
+                "dpd": request.dpd or 0,
+                "loan_type": request.loan_type or "Loan",
+                "language": request.language
+            }
+
         call_id = await call_handler.initiate_call(
-            phone_number=request.phone_number,
+            phone_number=phone,
             caller_id=request.caller_id,
-            borrower_id=request.borrower_id,
-            case_id=request.case_id,
+            borrower_id=request.borrower_id or "",
+            case_id=request.case_id or "",
             campaign_id=request.campaign_id,
+            campaign_borrower_id=request.campaign_borrower_id,
             language=request.language,
-            callback_url=request.callback_url
+            callback_url=request.callback_url,
+            use_ai=request.use_ai,
+            ai_context=ai_context
         )
 
         # Notify connected clients
         await ws_manager.broadcast({
             "type": "call_initiated",
             "call_id": call_id,
-            "phone_number": request.phone_number,
+            "phone_number": phone,
             "borrower_id": request.borrower_id,
-            "case_id": request.case_id
+            "case_id": request.case_id,
+            "use_ai": request.use_ai
         })
 
         return CallResponse(
             call_id=call_id,
             status="initiated",
-            message="Call initiated successfully"
+            message="Call initiated successfully" + (" with AI" if request.use_ai else "")
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

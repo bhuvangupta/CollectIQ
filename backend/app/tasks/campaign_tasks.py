@@ -105,7 +105,7 @@ def execute_campaign_batch(campaign_id: str, batch_size: int = 10):
         calls_initiated = 0
 
         for cb in pending:
-            # Get borrower
+            # Get borrower with loan info
             borrower = session.execute(
                 select(Borrower).where(Borrower.id == cb.borrower_id)
             ).scalar_one_or_none()
@@ -114,12 +114,44 @@ def execute_campaign_batch(campaign_id: str, batch_size: int = 10):
                 cb.status = "skipped"
                 continue
 
+            # Build borrower context for AI calls
+            borrower_context = None
+            if campaign.ai_enabled:
+                # Get loan and case info for context
+                from app.models.loan import Loan
+                from app.models.case import Case
+
+                loan = session.execute(
+                    select(Loan).where(Loan.borrower_id == borrower.id)
+                    .order_by(Loan.created_at.desc())
+                ).scalars().first()
+
+                # Get active case for this borrower
+                case = session.execute(
+                    select(Case).where(
+                        Case.borrower_id == borrower.id,
+                        Case.status.notin_(["closed", "resolved"])
+                    ).order_by(Case.created_at.desc())
+                ).scalars().first()
+
+                borrower_context = {
+                    "borrower_id": str(borrower.id),
+                    "case_id": str(case.id) if case else None,
+                    "borrower_name": borrower.name,
+                    "outstanding_amount": float(loan.outstanding_amount) if loan else 0,
+                    "emi_amount": float(loan.emi_amount) if loan else 0,
+                    "dpd": loan.dpd if loan else 0,
+                    "loan_type": loan.loan_type if loan else "Loan",
+                    "language": borrower.preferred_language or "hi"
+                }
+
             # Queue the call
             initiate_campaign_call.delay(
                 str(campaign_id),
                 str(cb.id),
                 borrower.primary_phone,
-                campaign.ai_enabled
+                campaign.ai_enabled,
+                borrower_context
             )
 
             cb.status = "queued"
@@ -143,21 +175,29 @@ def initiate_campaign_call(
     campaign_id: str,
     campaign_borrower_id: str,
     phone_number: str,
-    use_ai: bool
+    use_ai: bool,
+    borrower_context: dict = None
 ):
     """Initiate a single campaign call."""
     import httpx
 
     try:
+        # Build call request with borrower context for AI
+        call_request = {
+            "to_number": phone_number,
+            "use_ai": use_ai,
+            "campaign_id": campaign_id,
+            "campaign_borrower_id": campaign_borrower_id
+        }
+
+        # Add borrower context if provided (for AI calls)
+        if borrower_context:
+            call_request.update(borrower_context)
+
         # Call telephony service
         response = httpx.post(
             f"{settings.telephony_url}/calls/initiate",
-            json={
-                "to_number": phone_number,
-                "use_ai": use_ai,
-                "campaign_id": campaign_id,
-                "campaign_borrower_id": campaign_borrower_id
-            },
+            json=call_request,
             timeout=30.0
         )
         response.raise_for_status()

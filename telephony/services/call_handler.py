@@ -29,8 +29,11 @@ class CallHandler:
         borrower_id: str,
         case_id: str,
         campaign_id: Optional[str] = None,
+        campaign_borrower_id: Optional[str] = None,
         language: str = "hi",
-        callback_url: Optional[str] = None
+        callback_url: Optional[str] = None,
+        use_ai: bool = False,
+        ai_context: Optional[Dict[str, Any]] = None
     ) -> str:
         """Initiate an outbound collection call."""
         # Generate internal call ID
@@ -44,6 +47,7 @@ class CallHandler:
             "borrower_id": borrower_id,
             "case_id": case_id,
             "campaign_id": campaign_id,
+            "campaign_borrower_id": campaign_borrower_id,
             "language": language,
             "direction": "outbound",
             "status": "initiating",
@@ -56,7 +60,9 @@ class CallHandler:
             "outcome": None,
             "notes": [],
             "conversation_history": [],
-            "entities_extracted": {}
+            "entities_extracted": {},
+            "use_ai": use_ai,
+            "ai_context": ai_context or {}
         }
 
         self.active_calls[call_id] = call_data
@@ -127,38 +133,110 @@ class CallHandler:
         if not call:
             return
 
+        use_ai = call.get("use_ai", False)
+
         try:
-            # Get borrower context from backend
-            context = await self._get_borrower_context(call["borrower_id"], call["case_id"])
+            # Use stored context or fetch from backend
+            context = call.get("ai_context") or await self._get_borrower_context(
+                call["borrower_id"], call["case_id"]
+            )
+            context["language"] = call["language"]
 
-            # Get initial greeting from AI
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.ai_engine_url}/dialog/respond",
-                    json={
-                        "conversation_history": [],
-                        "context": context,
-                        "language": call["language"]
-                    },
-                    timeout=30.0
-                )
+            if use_ai:
+                # Use real-time WebSocket pipeline
+                await self._start_realtime_ai_session(call_id, context)
+            else:
+                # Fallback to HTTP-based dialog
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{self.ai_engine_url}/dialog/respond",
+                        json={
+                            "conversation_history": [],
+                            "context": context,
+                            "language": call["language"]
+                        },
+                        timeout=30.0
+                    )
 
-                if response.status_code == 200:
-                    ai_response = response.json()
-                    greeting = ai_response.get("response", "")
+                    if response.status_code == 200:
+                        ai_response = response.json()
+                        greeting = ai_response.get("response", "")
 
-                    # Add to conversation history
-                    self.active_calls[call_id]["conversation_history"].append({
-                        "role": "assistant",
-                        "content": greeting,
-                        "timestamp": datetime.utcnow().isoformat()
-                    })
+                        self.active_calls[call_id]["conversation_history"].append({
+                            "role": "assistant",
+                            "content": greeting,
+                            "timestamp": datetime.utcnow().isoformat()
+                        })
 
-                    # TTS would be triggered here to speak the greeting
-                    print(f"[Call {call_id}] AI: {greeting}")
+                        print(f"[Call {call_id}] AI: {greeting}")
 
         except Exception as e:
             print(f"Error starting AI conversation for call {call_id}: {e}")
+
+    async def _start_realtime_ai_session(self, call_id: str, context: Dict[str, Any]):
+        """Start a real-time AI voice session via WebSocket."""
+        import websockets
+        import json
+
+        call = self.active_calls.get(call_id)
+        if not call:
+            return
+
+        # Convert HTTP URL to WebSocket URL
+        ws_url = self.ai_engine_url.replace("http://", "ws://").replace("https://", "wss://")
+        voice_ws_url = f"{ws_url}/ws/voice/{call_id}"
+
+        print(f"[Call {call_id}] Connecting to AI voice WebSocket: {voice_ws_url}")
+
+        try:
+            async with websockets.connect(voice_ws_url) as ws:
+                # Send context update
+                await ws.send(json.dumps({
+                    "type": "update_context",
+                    "context": context
+                }))
+
+                # Receive context confirmation
+                response = await ws.recv()
+                if isinstance(response, str):
+                    msg = json.loads(response)
+                    print(f"[Call {call_id}] Context update: {msg.get('type')}")
+
+                # Receive greeting audio and transcript
+                while True:
+                    data = await asyncio.wait_for(ws.recv(), timeout=30.0)
+
+                    if isinstance(data, bytes):
+                        # TTS audio chunk - would be sent to telephony provider
+                        print(f"[Call {call_id}] Received {len(data)} bytes of greeting audio")
+                    else:
+                        msg = json.loads(data)
+                        msg_type = msg.get("type")
+
+                        if msg_type == "transcript":
+                            role = msg.get("role")
+                            text = msg.get("text")
+                            self.active_calls[call_id]["conversation_history"].append({
+                                "role": role,
+                                "content": text,
+                                "timestamp": datetime.utcnow().isoformat()
+                            })
+                            print(f"[Call {call_id}] {role}: {text}")
+
+                        elif msg_type == "greeting_complete":
+                            print(f"[Call {call_id}] AI greeting complete")
+                            # Store WebSocket for ongoing conversation
+                            self.active_calls[call_id]["ai_ws"] = ws
+                            break
+
+                        elif msg_type == "error":
+                            print(f"[Call {call_id}] AI error: {msg.get('message')}")
+                            break
+
+        except asyncio.TimeoutError:
+            print(f"[Call {call_id}] AI WebSocket timeout")
+        except Exception as e:
+            print(f"[Call {call_id}] AI WebSocket error: {e}")
 
     async def _get_borrower_context(self, borrower_id: str, case_id: str) -> Dict[str, Any]:
         """Get borrower context from backend."""
