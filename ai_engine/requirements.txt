@@ -21,6 +21,10 @@ pydub>=0.25.1
 soundfile>=0.12.1
 librosa>=0.10.1
 numpy>=1.26.0
+scipy>=1.10.0
+
+# Real-time voice (optional - for Silero VAD)
+# silero-vad is loaded via torch.hub at runtime
 
 # HTTP client
 httpx>=0.26.0
