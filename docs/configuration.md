@@ -70,6 +70,15 @@ See [Sarvam AI Guide](sarvam-ai.md) for detailed setup.
 | `WHISPER_MODEL` | Local Whisper model | `large-v3` |
 | `GROQ_STT_MODEL` | Groq STT model | `whisper-large-v3-turbo` |
 
+### Text-to-Speech
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `TTS_PROVIDER` | TTS provider (`edge` or `sarvam`) | `edge` |
+
+- **edge**: Microsoft Edge TTS - free, good quality, supports Hindi
+- **sarvam**: Sarvam AI TTS - better Indian voices, requires API key
+
 ### Voice Settings
 
 | Variable | Description | Default |
@@ -100,14 +109,25 @@ See [Sarvam AI Guide](sarvam-ai.md) for detailed setup.
 
 ## Telephony
 
-### Exotel (Production)
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `TELEPHONY_PROVIDER` | Telephony provider (`mock` or `exotel`) | `mock` |
+
+- **mock**: For development/testing without real phone calls
+- **exotel**: For production phone calls via Exotel API
+
+### Exotel Configuration
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `EXOTEL_API_KEY` | Exotel API key | (required) |
 | `EXOTEL_API_TOKEN` | Exotel API token | (required) |
-| `EXOTEL_SID` | Exotel SID | (required) |
-| `EXOTEL_SUBDOMAIN` | Exotel subdomain | (required) |
+| `EXOTEL_SID` | Exotel account SID | (required) |
+| `EXOTEL_SUBDOMAIN` | Exotel subdomain | `api` |
+| `EXOTEL_CALLER_ID` | Outbound caller ID | (required) |
+| `EXOTEL_WEBHOOK_URL` | Webhook base URL for callbacks | (required) |
+
+See [Exotel Integration](exotel.md) for detailed setup.
 
 ## Service Ports
 
@@ -138,15 +158,22 @@ POSTGRES_DB=loan_collection
 REDIS_HOST=localhost
 REDIS_PORT=6379
 
-# AI - Use Groq for fast cloud inference
-LLM_PROVIDER=groq
-STT_PROVIDER=groq
+# AI Providers
+LLM_PROVIDER=groq           # ollama, groq, or sarvam
+STT_PROVIDER=groq           # whisper, groq, or sarvam
+TTS_PROVIDER=edge           # edge or sarvam
 GROQ_API_KEY=gsk_your_api_key
 GROQ_MODEL=llama-3.1-8b-instant
 GROQ_STT_MODEL=whisper-large-v3-turbo
 
-# Voice AI - Bolna for phone calls
-VOICE_AI_PROVIDER=bolna
+# Voice AI - Bolna for AI phone calls
+VOICE_AI_PROVIDER=bolna     # bolna, elevenlabs, or exotel
 BOLNA_API_KEY=bn-your-api-key
 BOLNA_AGENT_ID=your-agent-id
+
+# Telephony - Direct phone calls
+TELEPHONY_PROVIDER=mock     # mock or exotel
+# EXOTEL_API_KEY=your-key
+# EXOTEL_SID=your-sid
+# EXOTEL_CALLER_ID=+91XXXXXXXXXX
 ```

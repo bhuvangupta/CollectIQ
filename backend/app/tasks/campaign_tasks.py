@@ -4,11 +4,14 @@ from uuid import UUID
 import asyncio
 
 from celery import shared_task
-from sqlalchemy import select, update
+from sqlalchemy import select, update, or_, and_
 from sqlalchemy.orm import Session
 
 from app.tasks.celery_app import celery_app
 from app.core.config import settings
+
+# Outcomes that should trigger retry
+RETRYABLE_OUTCOMES = ["no_answer", "busy", "voicemail", "failed", "network_error"]
 
 
 def get_sync_session():
@@ -84,13 +87,22 @@ def execute_campaign_batch(campaign_id: str, batch_size: int = 10):
         if not campaign or campaign.status != "running":
             return {"status": "skipped", "reason": "Campaign not running"}
 
-        # Get pending borrowers
+        now = datetime.utcnow()
+
+        # Get pending borrowers OR those due for retry
         pending = session.execute(
             select(CampaignBorrower).where(
                 CampaignBorrower.campaign_id == campaign_id,
-                CampaignBorrower.status == "pending",
+                or_(
+                    CampaignBorrower.status == "pending",
+                    and_(
+                        CampaignBorrower.status == "retry_scheduled",
+                        CampaignBorrower.next_attempt_at <= now
+                    )
+                ),
                 CampaignBorrower.attempt_count < campaign.max_attempts_per_borrower
             )
+            .order_by(CampaignBorrower.next_attempt_at.asc().nullsfirst())
             .order_by(CampaignBorrower.priority.desc())
             .limit(batch_size)
         ).scalars().all()
@@ -178,20 +190,44 @@ def initiate_campaign_call(
     use_ai: bool,
     borrower_context: dict = None
 ):
-    """Initiate a single campaign call."""
+    """Initiate a single campaign call using the configured provider."""
     import httpx
+    import os
 
     session = get_sync_session()
 
     try:
-        # For AI calls, use Voice AI provider (Bolna, etc.)
+        # Get campaign to check provider
+        from app.models.campaign import Campaign
+        campaign = session.execute(
+            select(Campaign).where(Campaign.id == campaign_id)
+        ).scalar_one_or_none()
+
+        # Determine which provider to use
+        provider = None
+        if campaign:
+            provider = campaign.telephony_provider
+
+        if not provider:
+            provider = os.getenv("VOICE_AI_PROVIDER", "bolna")
+
+        # For AI calls, use appropriate Voice AI provider
         if use_ai and borrower_context:
-            result = _make_voice_ai_call(
-                phone_number=phone_number,
-                borrower_context=borrower_context,
-                campaign_id=campaign_id,
-                campaign_borrower_id=campaign_borrower_id
-            )
+            if provider == "exotel":
+                result = _make_exotel_call(
+                    phone_number=phone_number,
+                    borrower_context=borrower_context,
+                    campaign_id=campaign_id,
+                    campaign_borrower_id=campaign_borrower_id
+                )
+            else:
+                # Default to Bolna
+                result = _make_voice_ai_call(
+                    phone_number=phone_number,
+                    borrower_context=borrower_context,
+                    campaign_id=campaign_id,
+                    campaign_borrower_id=campaign_borrower_id
+                )
 
             if result.get("success"):
                 # Update campaign borrower with call ID
@@ -321,6 +357,130 @@ def _make_voice_ai_call(
     return {"success": False, "message": f"Unknown provider: {provider}"}
 
 
+def _make_exotel_call(
+    phone_number: str,
+    borrower_context: dict,
+    campaign_id: str,
+    campaign_borrower_id: str
+) -> dict:
+    """Make a call using direct Exotel integration."""
+    import httpx
+    import os
+    import base64
+
+    api_key = os.getenv("EXOTEL_API_KEY")
+    api_token = os.getenv("EXOTEL_API_TOKEN")
+    sid = os.getenv("EXOTEL_SID")
+    subdomain = os.getenv("EXOTEL_SUBDOMAIN", "api")
+    caller_id = os.getenv("EXOTEL_CALLER_ID")
+    webhook_url = os.getenv("EXOTEL_WEBHOOK_URL")
+
+    if not all([api_key, api_token, sid, caller_id]):
+        return {"success": False, "message": "Exotel configuration incomplete"}
+
+    # Build auth header
+    credentials = f"{api_key}:{api_token}"
+    encoded = base64.b64encode(credentials.encode()).decode()
+
+    # Prepare call data with custom field for callback
+    custom_field = f"{campaign_id}:{campaign_borrower_id}"
+
+    data = {
+        "From": caller_id,
+        "To": phone_number,
+        "CallerId": caller_id,
+        "TimeLimit": "300",
+        "Record": "true",
+        "CustomField": custom_field,
+    }
+
+    if webhook_url:
+        data["StatusCallback"] = f"{webhook_url}/status"
+
+    try:
+        response = httpx.post(
+            f"https://{subdomain}.exotel.com/v1/Accounts/{sid}/Calls/connect.json",
+            headers={
+                "Authorization": f"Basic {encoded}",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            data=data,
+            timeout=30.0
+        )
+
+        print(f"[Exotel] Call response: {response.status_code} - {response.text}")
+
+        if response.status_code >= 400:
+            return {"success": False, "message": response.text}
+
+        result = response.json()
+        call_data = result.get("Call", {})
+
+        return {
+            "success": True,
+            "call_id": call_data.get("Sid"),
+            "status": call_data.get("Status", "queued")
+        }
+
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+@celery_app.task(name="app.tasks.campaign_tasks.schedule_retry")
+def schedule_retry(
+    campaign_id: str,
+    campaign_borrower_id: str,
+    outcome: str
+):
+    """Schedule a retry for a failed call attempt."""
+    session = get_sync_session()
+
+    try:
+        from app.models.campaign import Campaign, CampaignBorrower
+
+        campaign = session.execute(
+            select(Campaign).where(Campaign.id == campaign_id)
+        ).scalar_one_or_none()
+
+        cb = session.execute(
+            select(CampaignBorrower).where(
+                CampaignBorrower.id == campaign_borrower_id
+            )
+        ).scalar_one_or_none()
+
+        if not campaign or not cb:
+            return {"status": "error", "reason": "Not found"}
+
+        # Check if max attempts reached
+        if cb.attempt_count >= campaign.max_attempts_per_borrower:
+            cb.status = "failed"
+            cb.last_attempt_outcome = outcome
+            campaign.total_failed += 1
+            session.commit()
+            return {"status": "max_attempts_reached"}
+
+        # Get retry delays from campaign
+        retry_delays = campaign.retry_delays_minutes or [30, 120, 480]
+        delay_idx = min(cb.attempt_count - 1, len(retry_delays) - 1)
+        delay_minutes = retry_delays[delay_idx]
+
+        # Schedule retry
+        cb.status = "retry_scheduled"
+        cb.next_attempt_at = datetime.utcnow() + timedelta(minutes=delay_minutes)
+        cb.last_attempt_outcome = outcome
+
+        session.commit()
+
+        return {
+            "status": "retry_scheduled",
+            "next_attempt_at": cb.next_attempt_at.isoformat(),
+            "delay_minutes": delay_minutes
+        }
+
+    finally:
+        session.close()
+
+
 @celery_app.task(name="app.tasks.campaign_tasks.update_loan_buckets")
 def update_loan_buckets():
     """Update all loan buckets based on current DPD."""
@@ -375,14 +535,25 @@ def handle_call_completion(
         if not campaign or not cb:
             return {"status": "error", "reason": "Not found"}
 
-        # Update campaign borrower
+        # Check if this is a retryable outcome
+        if outcome in RETRYABLE_OUTCOMES:
+            # Schedule retry instead of marking completed
+            cb.last_attempt_outcome = outcome
+            session.commit()
+
+            # Trigger retry scheduling
+            schedule_retry.delay(campaign_id, campaign_borrower_id, outcome)
+            return {"status": "retry_scheduled", "outcome": outcome}
+
+        # Update campaign borrower as completed
         cb.status = "completed"
         cb.outcome = outcome
         cb.outcome_details = details
+        cb.last_attempt_outcome = outcome
 
         # Update campaign stats
         campaign.total_contacted += 1
-        if outcome in ["promise_to_pay", "payment_done"]:
+        if outcome in ["promise_to_pay", "payment_done", "callback_scheduled"]:
             campaign.total_successful += 1
 
         # Update results summary
@@ -392,7 +563,7 @@ def handle_call_completion(
 
         session.commit()
 
-        return {"status": "success"}
+        return {"status": "success", "outcome": outcome}
 
     finally:
         session.close()

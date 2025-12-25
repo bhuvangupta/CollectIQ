@@ -7,12 +7,13 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 import uuid
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import httpx
 
-from services.mock_provider import MockTelephonyProvider
+from services.factory import get_telephony_provider
 from services.call_handler import CallHandler
 from services.websocket_manager import ConnectionManager
 
@@ -20,9 +21,10 @@ from services.websocket_manager import ConnectionManager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    print("Starting Mock Telephony Service...")
+    provider_name = os.getenv("TELEPHONY_PROVIDER", "mock")
+    print(f"Starting Telephony Service ({provider_name})...")
     yield
-    print("Shutting down Mock Telephony Service...")
+    print("Shutting down Telephony Service...")
 
 
 app = FastAPI(
@@ -40,8 +42,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Services
-telephony_provider = MockTelephonyProvider()
+# Services - uses TELEPHONY_PROVIDER env var (mock/exotel)
+telephony_provider = get_telephony_provider()
 call_handler = CallHandler(telephony_provider)
 ws_manager = ConnectionManager()
 
@@ -316,6 +318,124 @@ async def sms_status_webhook(data: Dict[str, Any]):
         **data
     })
     return {"status": "received"}
+
+
+@app.post("/webhooks/exotel/status")
+async def exotel_status_webhook(request: Request):
+    """Handle Exotel call status webhooks.
+
+    Exotel sends these parameters:
+    - CallSid: Unique call identifier
+    - Status: queued, ringing, in-progress, completed, busy, failed, no-answer
+    - From: Caller number
+    - To: Called number
+    - Direction: inbound/outbound
+    - Duration: Call duration in seconds
+    - RecordingUrl: URL to call recording
+    - CustomField: Custom data we sent
+    """
+    # Parse form data (Exotel sends as form-urlencoded)
+    form_data = await request.form()
+    data = dict(form_data)
+
+    # Also try JSON body
+    if not data:
+        try:
+            data = await request.json()
+        except Exception:
+            pass
+
+    print(f"[Exotel Webhook] Received: {data}")
+
+    # Parse using provider if available
+    if hasattr(telephony_provider, 'parse_webhook'):
+        normalized = telephony_provider.parse_webhook(data)
+    else:
+        normalized = {
+            "call_id": data.get("CallSid"),
+            "status": data.get("Status", "").lower(),
+            "duration": int(data.get("Duration", 0)),
+            "recording_url": data.get("RecordingUrl"),
+            "custom_field": data.get("CustomField"),
+        }
+
+    call_id = normalized.get("call_id")
+    if call_id:
+        call = call_handler.get_call(call_id)
+        if call:
+            call_handler.update_call_status(
+                call_id=call_id,
+                status=normalized.get("status"),
+                duration=normalized.get("duration"),
+                recording_url=normalized.get("recording_url")
+            )
+
+        # Notify connected clients
+        await ws_manager.broadcast({
+            "type": "call_status_update",
+            **normalized
+        })
+
+        # Notify backend
+        await _notify_backend({
+            "type": "call_status",
+            "call_id": call_id,
+            "call_sid": call_id,
+            "CallSid": call_id,
+            "status": normalized.get("status"),
+            "Status": normalized.get("status"),
+            "duration": normalized.get("duration"),
+            "Duration": normalized.get("duration"),
+            "recording_url": normalized.get("recording_url"),
+            "RecordingUrl": normalized.get("recording_url"),
+            "custom_field": normalized.get("custom_field"),
+        })
+
+    return {"status": "received"}
+
+
+@app.post("/webhooks/exotel/passthru")
+async def exotel_passthru_webhook(request: Request):
+    """Handle Exotel passthru webhooks for real-time call control.
+
+    Exotel Passthru sends these for IVR/real-time events:
+    - CallSid: Call identifier
+    - Direction: inbound/outbound
+    - Digits: DTMF input from caller
+    - RecordingUrl: Partial recording
+    - CallStatus: Current status
+
+    Returns TwiML-like response to control call flow.
+    """
+    form_data = await request.form()
+    data = dict(form_data)
+
+    if not data:
+        try:
+            data = await request.json()
+        except Exception:
+            pass
+
+    print(f"[Exotel Passthru] Received: {data}")
+
+    call_id = data.get("CallSid")
+    digits = data.get("Digits")
+    status = data.get("CallStatus")
+
+    # Handle DTMF input
+    if digits:
+        await ws_manager.broadcast({
+            "type": "dtmf_received",
+            "call_id": call_id,
+            "digits": digits
+        })
+
+    # For now, return empty response (call continues)
+    # In future: return TwiML for IVR flows
+    return Response(
+        content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+        media_type="application/xml"
+    )
 
 
 @app.websocket("/ws")

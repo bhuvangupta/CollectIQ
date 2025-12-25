@@ -4,11 +4,11 @@ An intelligent loan collection platform for Indian financial institutions, featu
 
 ## Features
 
-- **AI Voice Calling** - Automated collection calls via [Bolna AI](docs/voice-ai-providers.md#bolna-ai-setup) or [ElevenLabs](docs/voice-ai-providers.md#elevenlabs-setup)
-- **Real-Time Voice Demo** - Browser-based [voice testing](docs/voice-demo.md) with AI agent
-- **Multi-Language Support** - Hindi, English, and Hinglish
+- **AI Voice Calling** - Automated collection calls via [Bolna AI](docs/voice-ai-providers.md#bolna-ai-setup), [ElevenLabs](docs/voice-ai-providers.md#elevenlabs-setup), or direct [Exotel](docs/exotel.md)
+- **Real-Time Voice Demo** - Browser-based [voice testing](docs/voice-demo.md) with configurable TTS (Edge/Sarvam)
+- **Multi-Language Support** - Hindi, English, and 9 Indian regional languages
 - **Multi-Channel Communication** - Phone calls, SMS, WhatsApp
-- **Campaign Management** - Bulk outreach with targeting and scheduling
+- **Campaign Automation** - Bulk calling with retry scheduling, per-campaign provider selection, and live monitoring
 - **Case Management** - Assign, track, and manage collection cases
 - **Analytics Dashboard** - Real-time metrics and agent performance
 - **Compliance Built-in** - RBI guideline compliance checking
@@ -21,6 +21,7 @@ An intelligent loan collection platform for Indian financial institutions, featu
 | Frontend | React 18, TypeScript, Tailwind CSS, Zustand |
 | AI/ML | Whisper/Groq/Sarvam STT, Edge/Sarvam TTS, Ollama/Groq/Sarvam LLM |
 | Voice AI | Bolna AI, ElevenLabs |
+| Telephony | Exotel (production), Mock (development) |
 
 ## Quick Start
 
@@ -68,6 +69,7 @@ cd collectiq
 | Document | Description |
 |----------|-------------|
 | [Voice AI Providers](docs/voice-ai-providers.md) | Setup Bolna AI or ElevenLabs for automated calls |
+| [Exotel Integration](docs/exotel.md) | Direct Exotel telephony for production calls |
 | [Sarvam AI](docs/sarvam-ai.md) | Indian language AI (STT, TTS, LLM) |
 | [Voice Demo](docs/voice-demo.md) | Browser-based voice testing guide |
 | [Development](docs/development.md) | Running services, testing, project structure |
@@ -82,15 +84,22 @@ cd collectiq
 POSTGRES_HOST=localhost
 POSTGRES_DB=loan_collection
 
-# AI (use Groq for fast cloud inference)
-LLM_PROVIDER=groq
-STT_PROVIDER=groq
+# AI Providers
+LLM_PROVIDER=groq          # ollama, groq, or sarvam
+STT_PROVIDER=groq          # whisper, groq, or sarvam
+TTS_PROVIDER=edge          # edge or sarvam
 GROQ_API_KEY=gsk_your_api_key
 
-# Voice AI (choose one)
-VOICE_AI_PROVIDER=bolna
+# Voice AI (for automated calls)
+VOICE_AI_PROVIDER=bolna    # bolna, elevenlabs, or exotel
 BOLNA_API_KEY=bn-your-api-key
 BOLNA_AGENT_ID=your-agent-id
+
+# Telephony (for direct calls)
+TELEPHONY_PROVIDER=mock    # mock or exotel
+EXOTEL_API_KEY=your-key
+EXOTEL_SID=your-sid
+EXOTEL_CALLER_ID=+91XXXXXXXXXX
 ```
 
 See [Configuration Guide](docs/configuration.md) for all options.

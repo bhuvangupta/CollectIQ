@@ -8,14 +8,14 @@ import json
 import uuid
 
 from voice.stt_service import STTService
-from voice.tts_service import TTSService
+from tts import get_tts_provider, TTSProvider
 from dialog.manager import DialogManager
 from realtime.pipeline import VoicePipeline
 
 
 # Initialize services
 stt_service: Optional[STTService] = None
-tts_service: Optional[TTSService] = None
+tts_service: Optional[TTSProvider] = None
 dialog_manager: Optional[DialogManager] = None
 
 # Active voice sessions
@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize services
     stt_service = STTService()
-    tts_service = TTSService()
+    tts_service = get_tts_provider()  # Uses TTS_PROVIDER env var (edge/sarvam)
     dialog_manager = DialogManager()
 
     print("AI Engine ready!")
@@ -127,6 +127,7 @@ async def health_check():
         "services": {
             "stt": stt_service is not None,
             "tts": tts_service is not None,
+            "tts_provider": tts_service.provider_name if tts_service else None,
             "dialog": dialog_manager is not None,
         }
     }

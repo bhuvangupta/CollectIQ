@@ -46,6 +46,9 @@ class CampaignCreate(CampaignBase):
     concurrent_calls: int = 10
     priority: int = 5
     tags: List[str] = []
+    # Provider settings
+    telephony_provider: Optional[str] = None  # bolna, exotel, mock
+    retry_delays_minutes: List[int] = [30, 120, 480]  # Retry delays after failures
 
 
 class CampaignUpdate(BaseModel):
@@ -65,6 +68,8 @@ class CampaignUpdate(BaseModel):
     concurrent_calls: Optional[int] = None
     priority: Optional[int] = None
     tags: Optional[List[str]] = None
+    telephony_provider: Optional[str] = None
+    retry_delays_minutes: Optional[List[int]] = None
 
 
 class CampaignResponse(CampaignBase):
@@ -90,6 +95,8 @@ class CampaignResponse(CampaignBase):
     max_attempts_per_borrower: int
     retry_interval_minutes: int
     concurrent_calls: int
+    telephony_provider: Optional[str]
+    retry_delays_minutes: List[int]
     total_targets: int
     total_attempted: int
     total_contacted: int
@@ -147,11 +154,24 @@ class CampaignBorrowerResponse(BaseModel):
     attempt_count: int
     last_attempt_at: Optional[datetime]
     next_attempt_at: Optional[datetime]
+    last_attempt_outcome: Optional[str]
     outcome: Optional[str]
     priority: int
 
     class Config:
         from_attributes = True
+
+
+class CampaignLiveStatus(BaseModel):
+    """Real-time campaign monitoring status."""
+    calls_in_progress: int = 0
+    calls_queued: int = 0
+    retries_pending: int = 0
+    calls_completed_1h: int = 0
+    success_rate_1h: float = 0.0
+    recent_outcomes: List[Dict[str, Any]] = []
+    calls_per_minute: float = 0.0
+    estimated_completion_time: Optional[datetime] = None
 
 
 class AddBorrowersToCampaignRequest(BaseModel):

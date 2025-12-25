@@ -3,7 +3,8 @@ from uuid import UUID
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, or_
+from datetime import timedelta
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_manager
@@ -20,6 +21,7 @@ from app.schemas.campaign import (
     CampaignBorrowerResponse,
     AddBorrowersToCampaignRequest,
     CampaignPreviewResponse,
+    CampaignLiveStatus,
     TargetCriteria,
 )
 from app.schemas.common import PaginatedResponse
@@ -542,4 +544,112 @@ async def get_campaign_borrowers(
         page=page,
         page_size=page_size,
         total_pages=(total + page_size - 1) // page_size
+    )
+
+
+@router.get("/{campaign_id}/live", response_model=CampaignLiveStatus)
+async def get_campaign_live_status(
+    campaign_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get real-time campaign monitoring status."""
+    # Verify campaign access
+    result = await db.execute(
+        select(Campaign).where(
+            Campaign.id == campaign_id,
+            Campaign.organization_id == current_user.organization_id
+        )
+    )
+    campaign = result.scalar_one_or_none()
+
+    if not campaign:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found"
+        )
+
+    now = datetime.utcnow()
+    one_hour_ago = now - timedelta(hours=1)
+
+    # Count calls in progress
+    in_progress_count = await db.scalar(
+        select(func.count()).select_from(CampaignBorrower).where(
+            CampaignBorrower.campaign_id == campaign_id,
+            CampaignBorrower.status == "in_progress"
+        )
+    )
+
+    # Count queued calls
+    queued_count = await db.scalar(
+        select(func.count()).select_from(CampaignBorrower).where(
+            CampaignBorrower.campaign_id == campaign_id,
+            CampaignBorrower.status == "queued"
+        )
+    )
+
+    # Count pending retries
+    retries_count = await db.scalar(
+        select(func.count()).select_from(CampaignBorrower).where(
+            CampaignBorrower.campaign_id == campaign_id,
+            CampaignBorrower.status == "retry_scheduled"
+        )
+    )
+
+    # Calls completed in last hour
+    completed_1h = await db.scalar(
+        select(func.count()).select_from(CampaignBorrower).where(
+            CampaignBorrower.campaign_id == campaign_id,
+            CampaignBorrower.status == "completed",
+            CampaignBorrower.last_attempt_at >= one_hour_ago
+        )
+    )
+
+    # Success rate in last hour
+    successful_1h = await db.scalar(
+        select(func.count()).select_from(CampaignBorrower).where(
+            CampaignBorrower.campaign_id == campaign_id,
+            CampaignBorrower.status == "completed",
+            CampaignBorrower.last_attempt_at >= one_hour_ago,
+            CampaignBorrower.outcome.in_(["promise_to_pay", "payment_done", "callback_scheduled"])
+        )
+    )
+    success_rate_1h = (successful_1h / completed_1h * 100) if completed_1h else 0.0
+
+    # Recent outcomes (last 10)
+    recent_result = await db.execute(
+        select(CampaignBorrower).where(
+            CampaignBorrower.campaign_id == campaign_id,
+            CampaignBorrower.status == "completed"
+        ).order_by(CampaignBorrower.last_attempt_at.desc()).limit(10)
+    )
+    recent_cbs = recent_result.scalars().all()
+    recent_outcomes = [
+        {
+            "borrower_id": str(cb.borrower_id),
+            "outcome": cb.outcome,
+            "timestamp": cb.last_attempt_at.isoformat() if cb.last_attempt_at else None
+        }
+        for cb in recent_cbs
+    ]
+
+    # Calculate calls per minute (based on last hour activity)
+    calls_per_minute = completed_1h / 60.0 if completed_1h else 0.0
+
+    # Estimate completion time
+    remaining = campaign.total_pending or 0
+    estimated_completion = None
+    if calls_per_minute > 0 and remaining > 0:
+        minutes_remaining = remaining / calls_per_minute
+        estimated_completion = now + timedelta(minutes=minutes_remaining)
+
+    return CampaignLiveStatus(
+        calls_in_progress=in_progress_count or 0,
+        calls_queued=queued_count or 0,
+        retries_pending=retries_count or 0,
+        calls_completed_1h=completed_1h or 0,
+        success_rate_1h=round(success_rate_1h, 2),
+        recent_outcomes=recent_outcomes,
+        calls_per_minute=round(calls_per_minute, 2),
+        estimated_completion_time=estimated_completion
     )
