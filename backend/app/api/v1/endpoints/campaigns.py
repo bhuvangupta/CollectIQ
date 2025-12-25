@@ -189,7 +189,9 @@ async def start_campaign(
     campaign.actual_start = datetime.utcnow()
     await db.commit()
 
-    # TODO: Trigger Celery task to execute campaign
+    # Trigger Celery task to execute campaign
+    from app.tasks.campaign_tasks import execute_campaign_batch
+    execute_campaign_batch.delay(str(campaign_id))
 
     return {"message": "Campaign started", "status": "running"}
 
