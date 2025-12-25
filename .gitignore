@@ -106,6 +106,8 @@ secrets/
 
 # Claude Code
 .claude/
+claude.md
+CLAUDE.md
 
 # Celery
 celerybeat-schedule
