@@ -19,7 +19,7 @@ An intelligent loan collection platform for Indian financial institutions, featu
 |-----------|------------|
 | Backend | Python 3.11+, FastAPI, PostgreSQL, Redis, Celery |
 | Frontend | React 18, TypeScript, Tailwind CSS, Zustand |
-| AI/ML | Whisper/Groq STT, Edge TTS, Ollama/Groq LLM |
+| AI/ML | Whisper/Groq/Sarvam STT, Edge/Sarvam TTS, Ollama/Groq/Sarvam LLM |
 | Voice AI | Bolna AI, ElevenLabs |
 
 ## Quick Start
@@ -68,6 +68,7 @@ cd collectiq
 | Document | Description |
 |----------|-------------|
 | [Voice AI Providers](docs/voice-ai-providers.md) | Setup Bolna AI or ElevenLabs for automated calls |
+| [Sarvam AI](docs/sarvam-ai.md) | Indian language AI (STT, TTS, LLM) |
 | [Voice Demo](docs/voice-demo.md) | Browser-based voice testing guide |
 | [Development](docs/development.md) | Running services, testing, project structure |
 | [Configuration](docs/configuration.md) | Environment variables reference |

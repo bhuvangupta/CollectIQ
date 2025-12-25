@@ -44,17 +44,29 @@ All configuration is done via environment variables. Copy `.env.example` to `.en
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `LLM_PROVIDER` | LLM provider (`ollama` or `groq`) | `ollama` |
+| `LLM_PROVIDER` | LLM provider (`ollama`, `groq`, or `sarvam`) | `ollama` |
 | `OLLAMA_HOST` | Ollama server URL | `http://localhost:11434` |
 | `OLLAMA_MODEL` | Ollama model | `qwen3:8b` |
 | `GROQ_API_KEY` | Groq API key | (required for groq) |
 | `GROQ_MODEL` | Groq LLM model | `llama-3.1-8b-instant` |
 
+### Sarvam AI (Indian Languages)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SARVAM_API_KEY` | Sarvam API key | (required for sarvam) |
+| `SARVAM_LLM_MODEL` | Sarvam LLM model | `sarvam-m` |
+| `SARVAM_STT_MODEL` | Sarvam STT model | `saarika:v2` |
+| `SARVAM_TTS_MODEL` | Sarvam TTS model | `bulbul:v2` |
+| `SARVAM_TTS_VOICE` | Default TTS voice | `Anushka` |
+
+See [Sarvam AI Guide](sarvam-ai.md) for detailed setup.
+
 ### Speech-to-Text
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `STT_PROVIDER` | STT provider (`whisper` or `groq`) | `whisper` |
+| `STT_PROVIDER` | STT provider (`whisper`, `groq`, or `sarvam`) | `whisper` |
 | `WHISPER_MODEL` | Local Whisper model | `large-v3` |
 | `GROQ_STT_MODEL` | Groq STT model | `whisper-large-v3-turbo` |
 
