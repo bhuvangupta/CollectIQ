@@ -24,6 +24,7 @@ import Button from '../components/ui/Button'
 import { StatusBadge, PriorityBadge, BucketBadge } from '../components/ui/Badge'
 import Modal from '../components/ui/Modal'
 import AICallModal from '../components/AICallModal'
+import ScriptCallModal from '../components/ScriptCallModal'
 
 export default function CaseDetail() {
   const { id } = useParams<{ id: string }>()
@@ -34,6 +35,7 @@ export default function CaseDetail() {
   const [assignModalOpen, setAssignModalOpen] = useState(false)
   const [followUpModalOpen, setFollowUpModalOpen] = useState(false)
   const [aiCallModalOpen, setAiCallModalOpen] = useState(false)
+  const [scriptCallModalOpen, setScriptCallModalOpen] = useState(false)
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
   const [expandedCommId, setExpandedCommId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'notes' | 'payments' | 'communications'>('communications')
@@ -325,11 +327,15 @@ export default function CaseDetail() {
           </Button>
           <Button variant="secondary" onClick={handleCall} loading={initiateCall.isPending}>
             <PhoneIcon className="h-5 w-5 mr-2" />
-            Quick Call
+            Manual Call
           </Button>
           <Button variant="secondary" onClick={() => setPaymentModalOpen(true)}>
             <CurrencyRupeeIcon className="h-5 w-5 mr-2" />
             Record Payment
+          </Button>
+          <Button variant="secondary" onClick={() => setScriptCallModalOpen(true)}>
+            <DocumentTextIcon className="h-5 w-5 mr-2" />
+            Script Call
           </Button>
           <Button onClick={() => setAiCallModalOpen(true)}>
             <SparklesIcon className="h-5 w-5 mr-2" />
@@ -1030,10 +1036,22 @@ export default function CaseDetail() {
         </div>
       </Modal>
 
-      {/* AI Call Modal */}
+      {/* AI Call Modal (Bolna - Fully Automated) */}
       <AICallModal
         isOpen={aiCallModalOpen}
         onClose={() => setAiCallModalOpen(false)}
+        caseId={id!}
+        borrowerId={caseData?.borrower_id}
+        loanId={caseData?.loan_id}
+        borrowerName={caseData?.borrower_name}
+        borrowerPhone={caseData?.borrower_phone}
+        preferredLanguage={(caseData as any)?.borrower_preferred_language || 'en'}
+      />
+
+      {/* Script Call Modal (Agent-guided with AI script) */}
+      <ScriptCallModal
+        isOpen={scriptCallModalOpen}
+        onClose={() => setScriptCallModalOpen(false)}
         caseId={id!}
         borrowerId={caseData?.borrower_id}
         loanId={caseData?.loan_id}

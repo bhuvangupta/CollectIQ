@@ -109,6 +109,12 @@ class Settings(BaseSettings):
     def telephony_url(self) -> str:
         return f"http://{self.telephony_host}:{self.telephony_port}"
 
+    # Voice AI Provider
+    voice_ai_provider: str = "bolna"  # "bolna", "vapi", "retell"
+    bolna_api_key: Optional[str] = None
+    bolna_agent_id: Optional[str] = None
+    voice_ai_webhook_url: Optional[str] = None
+
     class Config:
         env_file = os.path.join(PROJECT_ROOT, ".env")
         case_sensitive = False

@@ -181,8 +181,37 @@ def initiate_campaign_call(
     """Initiate a single campaign call."""
     import httpx
 
+    session = get_sync_session()
+
     try:
-        # Build call request with borrower context for AI
+        # For AI calls, use Voice AI provider (Bolna, etc.)
+        if use_ai and borrower_context:
+            result = _make_voice_ai_call(
+                phone_number=phone_number,
+                borrower_context=borrower_context,
+                campaign_id=campaign_id,
+                campaign_borrower_id=campaign_borrower_id
+            )
+
+            if result.get("success"):
+                # Update campaign borrower with call ID
+                from app.models.campaign import CampaignBorrower
+                cb = session.execute(
+                    select(CampaignBorrower).where(
+                        CampaignBorrower.id == campaign_borrower_id
+                    )
+                ).scalar_one_or_none()
+
+                if cb:
+                    cb.status = "in_progress"
+                    cb.outcome_details = {"call_id": result.get("call_id")}
+                    session.commit()
+
+                return result
+            else:
+                raise Exception(result.get("message", "Voice AI call failed"))
+
+        # For non-AI calls, use telephony service
         call_request = {
             "to_number": phone_number,
             "use_ai": use_ai,
@@ -190,11 +219,9 @@ def initiate_campaign_call(
             "campaign_borrower_id": campaign_borrower_id
         }
 
-        # Add borrower context if provided (for AI calls)
         if borrower_context:
             call_request.update(borrower_context)
 
-        # Call telephony service
         response = httpx.post(
             f"{settings.telephony_url}/calls/initiate",
             json=call_request,
@@ -205,7 +232,6 @@ def initiate_campaign_call(
 
     except Exception as e:
         # Update campaign borrower status on failure
-        session = get_sync_session()
         try:
             from app.models.campaign import CampaignBorrower
             cb = session.execute(
@@ -218,10 +244,81 @@ def initiate_campaign_call(
                 cb.status = "failed"
                 cb.outcome_details = {"error": str(e)}
                 session.commit()
-        finally:
-            session.close()
+        except Exception:
+            pass
 
         raise
+    finally:
+        session.close()
+
+
+def _make_voice_ai_call(
+    phone_number: str,
+    borrower_context: dict,
+    campaign_id: str,
+    campaign_borrower_id: str
+) -> dict:
+    """Make a Voice AI call using the configured provider."""
+    import httpx
+    import os
+
+    # Use Voice AI provider API
+    provider = os.getenv("VOICE_AI_PROVIDER", "bolna").lower()
+
+    if provider == "bolna":
+        api_key = os.getenv("BOLNA_API_KEY")
+        agent_id = os.getenv("BOLNA_AGENT_ID")
+
+        if not api_key or not agent_id:
+            return {"success": False, "message": "BOLNA_API_KEY or BOLNA_AGENT_ID not configured"}
+
+        payload = {
+            "agent_id": agent_id,
+            "recipient_phone_number": phone_number,
+            "user_data": {
+                "borrower_name": borrower_context.get("borrower_name", "Customer"),
+                "outstanding_amount": str(borrower_context.get("outstanding_amount", 0)),
+                "emi_amount": str(borrower_context.get("emi_amount", 0)),
+                "dpd": str(borrower_context.get("dpd", 0)),
+                "loan_type": borrower_context.get("loan_type", "Loan"),
+                "case_id": borrower_context.get("case_id", ""),
+                "campaign_id": campaign_id,
+                "campaign_borrower_id": campaign_borrower_id
+            }
+        }
+
+        try:
+            response = httpx.post(
+                "https://api.bolna.ai/call",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                },
+                json=payload,
+                timeout=30.0
+            )
+
+            print(f"[Voice AI] Call response: {response.status_code} - {response.text}")
+
+            if response.status_code >= 400:
+                try:
+                    error_data = response.json()
+                    error_msg = error_data.get("detail") or error_data.get("message") or str(error_data)
+                except Exception:
+                    error_msg = response.text
+                return {"success": False, "message": error_msg}
+
+            data = response.json()
+            return {
+                "success": True,
+                "call_id": data.get("execution_id"),
+                "status": data.get("status", "queued")
+            }
+
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
+    return {"success": False, "message": f"Unknown provider: {provider}"}
 
 
 @celery_app.task(name="app.tasks.campaign_tasks.update_loan_buckets")

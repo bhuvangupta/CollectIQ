@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import toast from 'react-hot-toast'
 import {
-  SparklesIcon,
+  DocumentTextIcon,
   PhoneIcon,
   ArrowPathIcon,
   CheckCircleIcon,
+  ClipboardDocumentIcon,
 } from '@heroicons/react/24/outline'
 import Modal from './ui/Modal'
 import Button from './ui/Button'
 import api from '../services/api'
+import toast from 'react-hot-toast'
 
-interface AICallModalProps {
+interface ScriptCallModalProps {
   isOpen: boolean
   onClose: () => void
   caseId: string
@@ -36,7 +37,7 @@ interface ScriptData {
   }
 }
 
-export default function AICallModal({
+export default function ScriptCallModal({
   isOpen,
   onClose,
   caseId,
@@ -45,7 +46,7 @@ export default function AICallModal({
   borrowerName,
   borrowerPhone,
   preferredLanguage = 'en',
-}: AICallModalProps) {
+}: ScriptCallModalProps) {
   const [script, setScript] = useState('')
   const [language, setLanguage] = useState(preferredLanguage)
   const [callInitiated, setCallInitiated] = useState(false)
@@ -73,14 +74,13 @@ export default function AICallModal({
     }
   }, [isOpen, caseId, language])
 
-  // Reset state when modal closes or opens with new preferred language
+  // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
       setCallInitiated(false)
       setScriptData(null)
       setScript('')
     } else {
-      // Set language to borrower's preferred language when modal opens
       setLanguage(preferredLanguage)
     }
   }, [isOpen, preferredLanguage])
@@ -89,32 +89,32 @@ export default function AICallModal({
     generateScript.mutate(language)
   }
 
+  const handleCopyScript = () => {
+    navigator.clipboard.writeText(script)
+    toast.success('Script copied to clipboard')
+  }
+
   const scriptLoading = generateScript.isPending
 
-  // Initiate AI call via Voice AI provider (Bolna)
+  // Initiate manual call with script (NOT using Bolna AI)
   const initiateCall = useMutation({
     mutationFn: async () => {
-      // Use the voice API endpoint for AI calls
-      const response = await api.post('/voice/call', {
-        phone_number: borrowerPhone,
-        borrower_name: scriptData?.context?.borrower_name || borrowerName,
-        outstanding_amount: scriptData?.context?.outstanding_amount || 0,
-        emi_amount: scriptData?.context?.emi_amount || 0,
-        dpd: scriptData?.context?.dpd || 0,
-        loan_type: 'Personal Loan',
-        case_id: caseId || undefined,
+      const response = await api.post('/communications/call', {
+        borrower_id: borrowerId,
+        case_id: caseId,
+        loan_id: loanId,
+        use_ai: false,  // Manual call, not AI
+        script,  // Script is saved for reference
+        language,
       })
       return response.data
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       setCallInitiated(true)
-      if (data.call_id) {
-        console.log('AI Call initiated with ID:', data.call_id)
-      }
+      toast.success('Call initiated - use the script as your guide')
     },
     onError: (error: any) => {
-      const message = error.response?.data?.message || error.response?.data?.detail || 'Failed to initiate call'
-      toast.error(message)
+      toast.error(error.response?.data?.detail || 'Failed to initiate call')
     },
   })
 
@@ -130,13 +130,13 @@ export default function AICallModal({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="AI Call (Automated)" size="lg">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Script Call" size="lg">
       <div className="space-y-4">
         {/* Info Banner */}
-        <div className="p-3 rounded-lg bg-primary-50 border border-primary-200">
-          <p className="text-sm text-primary-700">
-            <strong>Automated AI Call:</strong> Our AI agent (Priya) will have a natural
-            conversation with the borrower. The call is fully automated.
+        <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+          <p className="text-sm text-amber-700">
+            <strong>Script Call:</strong> AI generates a script for you to follow.
+            You'll make the call manually using this script as a guide.
           </p>
         </div>
 
@@ -147,8 +147,8 @@ export default function AICallModal({
             <p className="text-sm text-light-500">{borrowerPhone}</p>
           </div>
           <div className="flex items-center gap-2">
-            <SparklesIcon className="h-5 w-5 text-primary-500" />
-            <span className="text-sm font-medium text-primary-600">AI Agent: Priya</span>
+            <DocumentTextIcon className="h-5 w-5 text-amber-500" />
+            <span className="text-sm font-medium text-amber-600">Script Call</span>
           </div>
         </div>
 
@@ -156,39 +156,24 @@ export default function AICallModal({
         <div className="flex items-center gap-3">
           <label className="text-sm font-medium text-light-700">Language:</label>
           <div className="flex gap-2">
-            <button
-              type="button"
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                language === 'en'
-                  ? 'bg-primary-100 text-primary-700 border border-primary-300'
-                  : 'bg-light-100 text-light-600 border border-light-200 hover:bg-light-200'
-              }`}
-              onClick={() => setLanguage('en')}
-            >
-              English {preferredLanguage === 'en' && '★'}
-            </button>
-            <button
-              type="button"
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                language === 'hinglish'
-                  ? 'bg-primary-100 text-primary-700 border border-primary-300'
-                  : 'bg-light-100 text-light-600 border border-light-200 hover:bg-light-200'
-              }`}
-              onClick={() => setLanguage('hinglish')}
-            >
-              Hinglish {preferredLanguage === 'hinglish' && '★'}
-            </button>
-            <button
-              type="button"
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                language === 'hi'
-                  ? 'bg-primary-100 text-primary-700 border border-primary-300'
-                  : 'bg-light-100 text-light-600 border border-light-200 hover:bg-light-200'
-              }`}
-              onClick={() => setLanguage('hi')}
-            >
-              Hindi {preferredLanguage === 'hi' && '★'}
-            </button>
+            {[
+              { value: 'en', label: 'English' },
+              { value: 'hinglish', label: 'Hinglish' },
+              { value: 'hi', label: 'Hindi' },
+            ].map((lang) => (
+              <button
+                key={lang.value}
+                type="button"
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  language === lang.value
+                    ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                    : 'bg-light-100 text-light-600 border border-light-200 hover:bg-light-200'
+                }`}
+                onClick={() => setLanguage(lang.value)}
+              >
+                {lang.label} {preferredLanguage === lang.value && '★'}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -230,24 +215,35 @@ export default function AICallModal({
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="text-sm font-medium text-light-700">
-              Call Script
+              Your Call Script
             </label>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRegenerate}
-              disabled={scriptLoading}
-            >
-              <ArrowPathIcon
-                className={`h-4 w-4 mr-1 ${scriptLoading ? 'animate-spin' : ''}`}
-              />
-              Regenerate
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCopyScript}
+                disabled={!script.trim()}
+              >
+                <ClipboardDocumentIcon className="h-4 w-4 mr-1" />
+                Copy
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRegenerate}
+                disabled={scriptLoading}
+              >
+                <ArrowPathIcon
+                  className={`h-4 w-4 mr-1 ${scriptLoading ? 'animate-spin' : ''}`}
+                />
+                Regenerate
+              </Button>
+            </div>
           </div>
           {scriptLoading ? (
             <div className="flex items-center justify-center h-48 rounded-lg border border-light-200 bg-light-50">
               <div className="text-center">
-                <ArrowPathIcon className="h-8 w-8 text-primary-500 animate-spin mx-auto" />
+                <ArrowPathIcon className="h-8 w-8 text-amber-500 animate-spin mx-auto" />
                 <p className="mt-2 text-sm text-light-500">Generating script...</p>
               </div>
             </div>
@@ -255,26 +251,26 @@ export default function AICallModal({
             <textarea
               value={script}
               onChange={(e) => setScript(e.target.value)}
-              rows={8}
-              className="block w-full rounded-lg bg-white border border-light-300 px-4 py-3 shadow-sm text-light-900 placeholder-light-400 sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 resize-none"
+              rows={10}
+              className="block w-full rounded-lg bg-white border border-light-300 px-4 py-3 shadow-sm text-light-900 placeholder-light-400 sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 resize-none font-mono"
               placeholder="AI-generated script will appear here..."
             />
           )}
           <p className="mt-1 text-xs text-light-500">
-            This is a preview of what the AI might say. The actual conversation will be dynamic based on borrower responses.
+            Edit the script as needed. This will be saved with the call record for reference.
           </p>
         </div>
 
         {/* Call Status */}
         {callInitiated && (
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-accent-50 border border-accent-200">
-            <CheckCircleIcon className="h-5 w-5 text-accent-500" />
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 border border-green-200">
+            <CheckCircleIcon className="h-5 w-5 text-green-500" />
             <div>
-              <p className="text-sm font-medium text-accent-700">
-                AI Call Initiated
+              <p className="text-sm font-medium text-green-700">
+                Call Initiated
               </p>
-              <p className="text-xs text-accent-600">
-                The AI is now calling {borrowerName}. You can track progress in the communications section.
+              <p className="text-xs text-green-600">
+                Use the script above as your guide. The script is saved in the call record.
               </p>
             </div>
           </div>
@@ -290,9 +286,10 @@ export default function AICallModal({
               onClick={handleInitiateCall}
               loading={initiateCall.isPending}
               disabled={!script.trim() || scriptLoading}
+              className="bg-amber-600 hover:bg-amber-700"
             >
               <PhoneIcon className="h-5 w-5 mr-2" />
-              Initiate AI Call
+              Start Call with Script
             </Button>
           )}
         </div>

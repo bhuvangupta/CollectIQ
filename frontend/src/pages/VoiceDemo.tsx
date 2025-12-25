@@ -480,9 +480,9 @@ export default function VoiceDemo() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-light-900">AI Voice Demo</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-light-900">Internal AI Demo</h1>
         <p className="mt-1 text-xs sm:text-sm text-light-500">
-          Test real-time AI voice conversations with Priya
+          Test AI voice conversations in browser (no phone call)
         </p>
       </div>
 

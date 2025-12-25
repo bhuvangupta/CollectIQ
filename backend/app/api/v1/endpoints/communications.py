@@ -592,6 +592,8 @@ async def initiate_call(
 
     borrower = None
     borrower_id = request.borrower_id
+    loan = None
+    case = None
 
     # If case_id is provided but no borrower_id, get borrower from case
     if request.case_id and not request.borrower_id:
@@ -635,6 +637,13 @@ async def initiate_call(
     if request.language and request.language != borrower.preferred_language:
         borrower.preferred_language = request.language
 
+    # Get loan info if not already fetched
+    if not loan and borrower_id:
+        result = await db.execute(
+            select(Loan).where(Loan.borrower_id == borrower_id).order_by(Loan.created_at.desc())
+        )
+        loan = result.scalars().first()
+
     phone = request.phone_number or borrower.primary_phone
 
     # Create communication record
@@ -663,36 +672,72 @@ async def initiate_call(
     await db.commit()
     await db.refresh(communication)
 
-    # Initiate call via telephony service
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            call_payload = {
-                "phone_number": phone,
-                "caller_id": "+919999999999",
-                "borrower_id": str(borrower_id),
-                "case_id": str(request.case_id) if request.case_id else None,
-                "language": request.language,
-                "use_ai": request.use_ai,
-                "callback_url": f"{settings.vite_api_url}/api/v1/telephony/webhook/call-status"
-            }
-            # Include script for AI calls
-            if request.use_ai and request.script:
-                call_payload["script"] = request.script
+    # For AI calls, use Voice AI provider
+    if request.use_ai:
+        try:
+            from app.services.voice_ai import get_voice_ai_provider, BorrowerContext
 
-            response = await client.post(
-                f"{settings.telephony_url}/calls/initiate",
-                json=call_payload
+            provider = get_voice_ai_provider()
+
+            borrower_context = BorrowerContext(
+                name=borrower.full_name,
+                phone_number=phone,
+                outstanding_amount=float(loan.total_outstanding) if loan and loan.total_outstanding else 0,
+                emi_amount=float(loan.emi_amount) if loan and loan.emi_amount else 0,
+                dpd=loan.dpd if loan else 0,
+                loan_type=loan.loan_type if loan else "Loan",
+                case_id=str(request.case_id) if request.case_id else None
             )
-            if response.status_code == 200:
-                call_data = response.json()
-                communication.call_sid = call_data.get("call_id", call_sid)
+
+            result = await provider.make_call(
+                agent_id=None,  # Use default from env
+                borrower=borrower_context
+            )
+
+            if result.success:
+                communication.call_sid = result.call_id
+                communication.external_id = result.call_id
                 communication.status = "ringing"
                 await db.commit()
-    except Exception as e:
-        # Log error but don't fail - call record is created
-        print(f"Telephony service error: {e}")
-        communication.status = "failed"
-        await db.commit()
+            else:
+                communication.status = "failed"
+                communication.notes = result.message
+                await db.commit()
+
+        except Exception as e:
+            print(f"Voice AI error: {e}")
+            communication.status = "failed"
+            communication.notes = str(e)
+            await db.commit()
+    else:
+        # For non-AI calls, use telephony service
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                call_payload = {
+                    "phone_number": phone,
+                    "caller_id": "+919999999999",
+                    "borrower_id": str(borrower_id),
+                    "case_id": str(request.case_id) if request.case_id else None,
+                    "language": request.language,
+                    "use_ai": request.use_ai,
+                    "callback_url": f"{settings.vite_api_url}/api/v1/telephony/webhook/call-status"
+                }
+                if request.script:
+                    call_payload["script"] = request.script
+
+                response = await client.post(
+                    f"{settings.telephony_url}/calls/initiate",
+                    json=call_payload
+                )
+                if response.status_code == 200:
+                    call_data = response.json()
+                    communication.call_sid = call_data.get("call_id", call_sid)
+                    communication.status = "ringing"
+                    await db.commit()
+        except Exception as e:
+            print(f"Telephony service error: {e}")
+            communication.status = "failed"
+            await db.commit()
 
     return InitiateCallResponse(
         communication_id=communication.id,

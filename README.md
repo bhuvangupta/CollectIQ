@@ -4,43 +4,23 @@ An intelligent loan collection platform for Indian financial institutions, featu
 
 ## Features
 
-- **Real-Time AI Voice**: Live voice conversations with AI agent "Pooja" in Hinglish (Hindi-English mix)
-- **Browser Voice Demo**: Push-to-talk interface for testing AI conversations
-- **AI Voice Bot**: Automated collection calls using speech recognition (Whisper/Groq) and text-to-speech (Edge TTS)
-- **Multi-Language Support**: Hindi, English, and Hinglish support for voice and text
-- **Intelligent Dialog**: Context-aware conversations using configurable LLM (Ollama or Groq)
-- **Multi-Channel Communication**: Phone calls, SMS, and WhatsApp integration
-- **Campaign Management**: Bulk outreach campaigns with targeting and scheduling
-- **Case Management**: Assign, track, and manage collection cases
-- **Analytics Dashboard**: Real-time metrics, collection trends, and agent performance
-- **Compliance Built-in**: RBI guideline compliance checking in conversations
-- **Multi-Tenant**: Row-level security for multiple organizations
+- **AI Voice Calling** - Automated collection calls via [Bolna AI](docs/voice-ai-providers.md#bolna-ai-setup) or [ElevenLabs](docs/voice-ai-providers.md#elevenlabs-setup)
+- **Real-Time Voice Demo** - Browser-based [voice testing](docs/voice-demo.md) with AI agent
+- **Multi-Language Support** - Hindi, English, and Hinglish
+- **Multi-Channel Communication** - Phone calls, SMS, WhatsApp
+- **Campaign Management** - Bulk outreach with targeting and scheduling
+- **Case Management** - Assign, track, and manage collection cases
+- **Analytics Dashboard** - Real-time metrics and agent performance
+- **Compliance Built-in** - RBI guideline compliance checking
 
 ## Tech Stack
 
-### Backend
-- Python 3.11+ with FastAPI
-- PostgreSQL 15
-- Redis for caching and Celery broker
-- SQLAlchemy with async support
-- Alembic for migrations
-
-### Frontend
-- React 18 with TypeScript
-- Tailwind CSS for styling
-- Zustand for state management
-- React Query for data fetching
-- Recharts for visualizations
-
-### AI/ML
-- Configurable STT provider for speech-to-text:
-  - **Whisper** (default): Local inference with OpenAI Whisper
-  - **Groq**: Cloud API with Whisper Large v3 Turbo
-- Edge TTS (Microsoft) for text-to-speech (supports 9 Indian languages)
-- Configurable LLM provider for dialog management:
-  - **Ollama** (default): Local inference with Qwen3 8B
-  - **Groq**: Cloud API with Qwen QwQ 32B
-- Custom compliance checking
+| Component | Technology |
+|-----------|------------|
+| Backend | Python 3.11+, FastAPI, PostgreSQL, Redis, Celery |
+| Frontend | React 18, TypeScript, Tailwind CSS, Zustand |
+| AI/ML | Whisper/Groq STT, Edge TTS, Ollama/Groq LLM |
+| Voice AI | Bolna AI, ElevenLabs |
 
 ## Quick Start
 
@@ -50,287 +30,90 @@ An intelligent loan collection platform for Indian financial institutions, featu
 - Node.js 18+
 - PostgreSQL 15+
 - Redis
-- ffmpeg (required for Whisper STT)
-- 16GB+ RAM recommended (for AI models)
 
 ### Installation
 
 ```bash
-# Clone the repository
+# Clone and install
 git clone <repository-url>
-cd v1
-
-# Run installation script
+cd collectiq
 ./scripts/install.sh
-```
 
-### Setup Database
-
-```bash
-# Setup PostgreSQL database and run migrations
+# Setup database
 ./scripts/setup_db.sh
+./scripts/seed.sh  # Optional: sample data
 
-# Seed sample data (optional)
-./scripts/seed.sh
-```
-
-### Setup Ollama (for AI features)
-
-```bash
+# Setup AI (optional, for local LLM)
 ./scripts/ollama_setup.sh
-```
 
-### Start All Services
-
-```bash
-# Start all services (backend, frontend, AI engine, telephony, celery)
+# Start all services
 ./scripts/start.sh
 ```
 
-### Access the Application
+### Access
 
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000/docs
-- AI Engine: http://localhost:8001/docs
-- Telephony: http://localhost:8002/docs
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:3000 |
+| Backend API | http://localhost:8000/docs |
+| AI Engine | http://localhost:8001/docs |
 
-### Default Credentials
+### Default Login
 
 - Email: `admin@collectiq.com`
 - Password: `password123`
 
-## Scripts Reference
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Voice AI Providers](docs/voice-ai-providers.md) | Setup Bolna AI or ElevenLabs for automated calls |
+| [Voice Demo](docs/voice-demo.md) | Browser-based voice testing guide |
+| [Development](docs/development.md) | Running services, testing, project structure |
+| [Configuration](docs/configuration.md) | Environment variables reference |
+
+## Quick Configuration
+
+```bash
+# .env - Minimal setup for AI calling
+
+# Database
+POSTGRES_HOST=localhost
+POSTGRES_DB=loan_collection
+
+# AI (use Groq for fast cloud inference)
+LLM_PROVIDER=groq
+STT_PROVIDER=groq
+GROQ_API_KEY=gsk_your_api_key
+
+# Voice AI (choose one)
+VOICE_AI_PROVIDER=bolna
+BOLNA_API_KEY=bn-your-api-key
+BOLNA_AGENT_ID=your-agent-id
+```
+
+See [Configuration Guide](docs/configuration.md) for all options.
+
+## Scripts
 
 | Script | Description |
 |--------|-------------|
-| `./scripts/install.sh` | Install all dependencies |
-| `./scripts/setup_db.sh` | Create database and run migrations |
-| `./scripts/seed.sh` | Seed database with sample data |
 | `./scripts/start.sh` | Start all services |
 | `./scripts/stop.sh` | Stop all services |
-| `./scripts/start_backend.sh` | Start only backend API |
-| `./scripts/start_frontend.sh` | Start only frontend |
-| `./scripts/start_ai.sh` | Start only AI engine |
-| `./scripts/start_telephony.sh` | Start only telephony service |
-| `./scripts/start_celery.sh` | Start Celery worker/beat |
-| `./scripts/migrate.sh` | Database migration commands |
-| `./scripts/test.sh` | Run tests |
-| `./scripts/lint.sh` | Run linting |
-| `./scripts/logs.sh` | View service logs |
-| `./scripts/ollama_setup.sh` | Setup Ollama with Llama model |
+| `./scripts/migrate.sh upgrade` | Run database migrations |
+| `./scripts/seed.sh` | Seed sample data |
+| `./scripts/logs.sh all` | View all logs |
 
-## Project Structure
-
-```
-v1/
-├── backend/                 # FastAPI backend
-│   ├── app/
-│   │   ├── api/            # API endpoints
-│   │   ├── core/           # Config, security, database
-│   │   ├── models/         # SQLAlchemy models
-│   │   ├── schemas/        # Pydantic schemas
-│   │   ├── services/       # Business logic
-│   │   └── tasks/          # Celery tasks
-│   └── alembic/            # Database migrations
-├── frontend/               # React frontend
-│   └── src/
-│       ├── components/     # UI components
-│       ├── pages/          # Page components
-│       ├── stores/         # Zustand stores
-│       ├── services/       # API services
-│       └── hooks/          # Custom hooks
-├── ai_engine/              # AI/ML services
-│   ├── voice/              # STT/TTS services
-│   ├── dialog/             # Dialog management
-│   └── realtime/           # Real-time voice pipeline
-├── telephony/              # Telephony service
-│   └── services/           # Call handling
-├── scripts/                # Bash scripts
-├── logs/                   # Service logs
-└── README.md
-```
-
-## Development
-
-### Running Individual Services
-
-```bash
-# Backend only
-./scripts/start_backend.sh
-
-# Frontend only
-./scripts/start_frontend.sh
-
-# AI Engine only
-./scripts/start_ai.sh
-
-# Telephony only
-./scripts/start_telephony.sh
-
-# Celery worker
-./scripts/start_celery.sh worker
-
-# Celery beat (scheduler)
-./scripts/start_celery.sh beat
-```
-
-### Database Migrations
-
-```bash
-# Run pending migrations
-./scripts/migrate.sh upgrade
-
-# Rollback one migration
-./scripts/migrate.sh downgrade
-
-# Create new migration
-./scripts/migrate.sh create "add_new_table"
-
-# View migration history
-./scripts/migrate.sh history
-```
-
-### Running Tests
-
-```bash
-# Backend tests
-./scripts/test.sh backend
-
-# Frontend tests
-./scripts/test.sh frontend
-
-# Backend with coverage
-./scripts/test.sh cov
-
-# All tests
-./scripts/test.sh all
-```
-
-### Code Quality
-
-```bash
-# Check linting
-./scripts/lint.sh check
-
-# Fix linting issues
-./scripts/lint.sh fix
-
-# Format code
-./scripts/lint.sh format
-```
-
-### Viewing Logs
-
-```bash
-# All logs
-./scripts/logs.sh all
-
-# Specific service
-./scripts/logs.sh backend
-./scripts/logs.sh frontend
-./scripts/logs.sh ai
-./scripts/logs.sh telephony
-./scripts/logs.sh celery
-```
-
-## Real-Time Voice Demo
-
-The platform includes a browser-based voice demo for testing AI conversations.
-
-### Accessing the Demo
-
-1. Start all services: `./scripts/start.sh`
-2. Login as admin or manager
-3. Navigate to **Voice Demo** in the sidebar (or go to `/voice-demo`)
-
-### How It Works
-
-```
-┌─────────────────────────────────────────┐
-│         AI Voice Demo                   │
-├─────────────────────────────────────────┤
-│  Browser Mic → WebSocket → AI Engine    │
-│                                         │
-│  1. Hold microphone button to speak     │
-│  2. Release to send audio to AI         │
-│  3. AI responds in Hinglish via speaker │
-├─────────────────────────────────────────┤
-│  Voice Pipeline:                        │
-│  ├─ VAD detects speech end              │
-│  ├─ Whisper/Groq transcribes speech     │
-│  ├─ LLM generates contextual response   │
-│  └─ Edge TTS speaks response            │
-└─────────────────────────────────────────┘
-```
-
-### Configuration
-
-Configure the borrower context in the demo:
-- Borrower name, outstanding amount, EMI
-- Days past due (DPD), loan type
-- Language preference
-
-### WebSocket Endpoint
-
-```
-ws://localhost:8001/ws/voice/{session_id}
-```
-
-Protocol:
-- **Client sends**: Binary audio (16-bit PCM, 16kHz, mono)
-- **Server sends**: Binary audio (MP3) or JSON messages
-- **JSON types**: `greeting_complete`, `transcript`, `processing`, `response_complete`, `error`
-
-## API Documentation
-
-Interactive API documentation is available at:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-
-### Key Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `POST /api/v1/auth/login` | User authentication |
-| `GET /api/v1/cases` | List collection cases |
-| `POST /api/v1/communications/call` | Initiate a call |
-| `GET /api/v1/analytics/dashboard` | Dashboard metrics |
-| `POST /api/v1/campaigns` | Create campaign |
-
-## Configuration
-
-Key environment variables (see `.env.example`):
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection | `postgresql+asyncpg://...` |
-| `REDIS_URL` | Redis connection | `redis://localhost:6379/0` |
-| `SECRET_KEY` | JWT secret key | (generated) |
-| `LLM_PROVIDER` | LLM provider to use | `ollama` |
-| `OLLAMA_HOST` | Ollama server URL | `http://localhost:11434` |
-| `OLLAMA_MODEL` | Ollama model to use | `qwen3:8b` |
-| `STT_PROVIDER` | Speech-to-text provider | `whisper` |
-| `WHISPER_MODEL` | Local Whisper model | `large-v3` |
-| `GROQ_API_KEY` | Groq API key (required if using Groq) | - |
-| `GROQ_MODEL` | Groq LLM model to use | `qwen-qwq-32b` |
-| `GROQ_STT_MODEL` | Groq STT model to use | `whisper-large-v3-turbo` |
-| `VAD_MIN_SILENCE_MS` | Min silence before speech end | `500` |
-| `VAD_MIN_SPEECH_MS` | Min speech duration to process | `200` |
-| `TTS_RATE` | Speech rate for TTS | `+10%` |
+See [Development Guide](docs/development.md) for more scripts.
 
 ## Compliance
 
-This platform includes built-in compliance features for RBI collection guidelines:
-
-- **Timing Restrictions**: Calls only between 8 AM - 7 PM
-- **Language Monitoring**: Detection of threatening/abusive language
-- **Privacy Protection**: Prevention of third-party disclosure
-- **Call Recording**: All calls recorded for audit
+Built-in RBI collection guideline compliance:
+- Timing restrictions (8 AM - 7 PM)
+- Language monitoring
+- Privacy protection
+- Call recording for audit
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Apache License 2.0 - see [LICENSE](LICENSE)
