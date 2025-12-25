@@ -24,6 +24,6 @@ python scripts/seed_data.py
 
 echo ""
 echo "Default login credentials:"
-echo "  Email:    admin@abcfin.com"
+echo "  Email:    admin@collectiq.com"
 echo "  Password: password123"
 echo ""

@@ -197,7 +197,7 @@ export default function Login() {
 
           <div className="mt-6 p-4 rounded-xl bg-light-100 border border-light-200">
             <p className="text-center text-sm text-light-500">
-              Demo: <span className="text-light-700 font-medium">admin@abcfin.com</span> / <span className="text-light-700 font-medium">password123</span>
+              Demo: <span className="text-light-700 font-medium">admin@collectiq.com</span> / <span className="text-light-700 font-medium">password123</span>
             </p>
           </div>
         </div>

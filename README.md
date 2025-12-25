@@ -89,7 +89,7 @@ cd v1
 
 ### Default Credentials
 
-- Email: `admin@abcfin.com`
+- Email: `admin@collectiq.com`
 - Password: `password123`
 
 ## Scripts Reference

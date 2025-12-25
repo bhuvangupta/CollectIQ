@@ -44,11 +44,11 @@ ORGANIZATION_DATA = [
 ]
 
 USER_DATA = [
-    {"email": "admin@abcfin.com", "full_name": "Admin User", "role": "admin"},
-    {"email": "manager@abcfin.com", "full_name": "Manager User", "role": "manager"},
-    {"email": "agent1@abcfin.com", "full_name": "Agent One", "role": "agent"},
-    {"email": "agent2@abcfin.com", "full_name": "Agent Two", "role": "agent"},
-    {"email": "agent3@abcfin.com", "full_name": "Agent Three", "role": "agent"},
+    {"email": "admin@collectiq.com", "full_name": "Admin User", "role": "admin"},
+    {"email": "manager@collectiq.com", "full_name": "Manager User", "role": "manager"},
+    {"email": "agent1@collectiq.com", "full_name": "Agent One", "role": "agent"},
+    {"email": "agent2@collectiq.com", "full_name": "Agent Two", "role": "agent"},
+    {"email": "agent3@collectiq.com", "full_name": "Agent Three", "role": "agent"},
 ]
 
 BORROWER_NAMES = [
@@ -255,7 +255,7 @@ async def seed_database():
         print(f"  Organizations: {len(orgs)}")
         print(f"  Users: {len(users)}")
         print(f"  Borrowers/Loans: {len(BORROWER_NAMES)}")
-        print("\nDefault login: admin@abcfin.com / password123")
+        print("\nDefault login: admin@collectiq.com / password123")
 
 
 if __name__ == "__main__":
