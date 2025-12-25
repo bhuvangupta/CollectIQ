@@ -11,8 +11,12 @@ if [ -f "$PROJECT_ROOT/.env" ]; then
     export $(grep -v '^#' "$PROJECT_ROOT/.env" | xargs)
 fi
 
-# Activate virtual environment
-source "$PROJECT_ROOT/venv/bin/activate"
+# Activate AI engine's virtual environment
+if [ -d "$PROJECT_ROOT/ai_engine/venv" ]; then
+    source "$PROJECT_ROOT/ai_engine/venv/bin/activate"
+else
+    source "$PROJECT_ROOT/venv/bin/activate"
+fi
 
 echo "Starting AI Engine on http://localhost:8001"
 echo ""

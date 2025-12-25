@@ -65,11 +65,16 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > "$PROJECT_ROOT/logs/b
 echo $! >> "$PID_FILE"
 echo -e "${GREEN}Backend started on http://localhost:8000${NC}"
 
-# Start AI Engine
+# Start AI Engine (uses its own venv)
 echo -e "\n${YELLOW}Starting AI Engine...${NC}"
 cd "$PROJECT_ROOT/ai_engine"
+if [ -d "$PROJECT_ROOT/ai_engine/venv" ]; then
+    source "$PROJECT_ROOT/ai_engine/venv/bin/activate"
+fi
 uvicorn main:app --host 0.0.0.0 --port 8001 --reload > "$PROJECT_ROOT/logs/ai_engine.log" 2>&1 &
 echo $! >> "$PID_FILE"
+# Re-activate main venv for other services
+source "$PROJECT_ROOT/venv/bin/activate"
 echo -e "${GREEN}AI Engine started on http://localhost:8001${NC}"
 
 # Start Telephony Service
