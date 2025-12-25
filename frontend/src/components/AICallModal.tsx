@@ -40,12 +40,15 @@ export default function AICallModal({
   isOpen,
   onClose,
   caseId,
-  borrowerId,
-  loanId,
+  borrowerId: _borrowerId,
+  loanId: _loanId,
   borrowerName,
   borrowerPhone,
   preferredLanguage = 'en',
 }: AICallModalProps) {
+  // borrowerId and loanId are passed but not directly used (available in scriptData.context)
+  void _borrowerId
+  void _loanId
   const [script, setScript] = useState('')
   const [language, setLanguage] = useState(preferredLanguage)
   const [callInitiated, setCallInitiated] = useState(false)

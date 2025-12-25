@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     ai_engine_port: int = 8001
 
     # LLM Provider
-    llm_provider: str = "ollama"  # "ollama" or "groq"
+    llm_provider: str = "sarvam"  # "ollama", "groq", or "sarvam"
 
     # Ollama (LLM)
     ollama_host: str = "http://localhost:11434"
@@ -86,9 +86,34 @@ class Settings(BaseSettings):
     groq_model: str = "qwen-qwq-32b"
 
     # STT Provider
-    stt_provider: str = "whisper"  # "whisper" or "groq"
+    stt_provider: str = "sarvam"  # "whisper", "groq", or "sarvam"
     whisper_model: str = "base"
     groq_stt_model: str = "whisper-large-v3-turbo"
+
+    # TTS Provider
+    tts_provider: str = "sarvam"  # "sarvam", "elevenlabs", or "local"
+
+    # Sarvam AI (LLM, STT, TTS)
+    sarvam_api_key: Optional[str] = None
+    sarvam_llm_model: str = "sarvam-m"
+    sarvam_stt_model: str = "saarika:v2"
+    sarvam_tts_model: str = "bulbul:v2"
+    sarvam_tts_voice: str = "Anushka"
+    sarvam_stt_language: str = "hi-IN"
+    sarvam_tts_language: str = "hi-IN-HINGLISH"
+
+    # ElevenLabs (TTS fallback)
+    elevenlabs_api_key: Optional[str] = None
+    elevenlabs_voice_id: Optional[str] = None
+
+    # Deepgram (STT/TTS)
+    deepgram_api_key: Optional[str] = None
+
+    # Cartesia (TTS)
+    cartesia_api_key: Optional[str] = None
+
+    # OpenAI
+    openai_api_key: Optional[str] = None
 
     # Frontend
     vite_api_url: str = "http://localhost:8000"
@@ -110,10 +135,15 @@ class Settings(BaseSettings):
         return f"http://{self.telephony_host}:{self.telephony_port}"
 
     # Voice AI Provider
-    voice_ai_provider: str = "bolna"  # "bolna", "vapi", "retell"
+    voice_ai_provider: str = "livekit"  # "bolna", "livekit", "sarvam"
     bolna_api_key: Optional[str] = None
     bolna_agent_id: Optional[str] = None
     voice_ai_webhook_url: Optional[str] = None
+
+    # LiveKit (for real-time voice AI)
+    livekit_url: str = "wss://your-project.livekit.cloud"
+    livekit_api_key: Optional[str] = None
+    livekit_api_secret: Optional[str] = None
 
     class Config:
         env_file = os.path.join(PROJECT_ROOT, ".env")

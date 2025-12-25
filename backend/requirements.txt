@@ -54,3 +54,9 @@ black>=23.0.0
 
 # Logging
 structlog>=24.1.0
+
+# LiveKit Voice AI
+livekit>=1.0.0
+livekit-agents>=1.0.0
+livekit-plugins-sarvam>=1.0.0
+livekit-plugins-openai>=1.0.0

@@ -33,6 +33,9 @@ def get_voice_ai_provider() -> VoiceAIProvider:
     elif provider_name == "elevenlabs":
         from .elevenlabs_provider import ElevenLabsProvider
         _provider_instance = ElevenLabsProvider()
+    elif provider_name == "sarvam":
+        from .sarvam_provider import SarvamProvider
+        _provider_instance = SarvamProvider()
     # Future providers can be added here:
     # elif provider_name == "vapi":
     #     from .vapi_provider import VapiProvider
@@ -43,7 +46,7 @@ def get_voice_ai_provider() -> VoiceAIProvider:
     else:
         raise ValueError(
             f"Unknown Voice AI provider: {provider_name}. "
-            f"Supported: 'bolna', 'elevenlabs'"
+            f"Supported: 'bolna', 'elevenlabs', 'sarvam'"
         )
 
     print(f"Voice AI Provider: {_provider_instance.provider_name}")
