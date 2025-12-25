@@ -5,6 +5,8 @@ import {
   SpeakerWaveIcon,
   PhoneXMarkIcon,
   PhoneIcon,
+  SignalIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
@@ -31,6 +33,87 @@ const DEFAULT_CONTEXT: BorrowerContext = {
   loan_type: 'Personal Loan',
 }
 
+// Audio waveform component
+function AudioWaveform({ audioLevel, isActive }: { audioLevel: number; isActive: boolean }) {
+  const bars = 5
+  return (
+    <div className="flex items-center justify-center gap-1 h-8">
+      {Array.from({ length: bars }).map((_, i) => {
+        const barLevel = isActive ? Math.min(1, audioLevel * (1 + Math.random() * 0.5)) : 0
+        const height = Math.max(4, barLevel * 32)
+        return (
+          <div
+            key={i}
+            className={`w-1 rounded-full transition-all duration-75 ${
+              isActive ? 'bg-primary-500' : 'bg-light-300'
+            }`}
+            style={{ height: `${height}px` }}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+// Call timer component
+function CallTimer({ startTime }: { startTime: Date | null }) {
+  const [elapsed, setElapsed] = useState(0)
+
+  useEffect(() => {
+    if (!startTime) {
+      setElapsed(0)
+      return
+    }
+
+    const interval = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startTime.getTime()) / 1000))
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [startTime])
+
+  const minutes = Math.floor(elapsed / 60)
+  const seconds = elapsed % 60
+
+  return (
+    <div className="flex items-center gap-1 text-light-600">
+      <ClockIcon className="h-4 w-4" />
+      <span className="text-sm font-mono">
+        {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+      </span>
+    </div>
+  )
+}
+
+// Connection quality indicator
+function ConnectionQuality({ latency }: { latency: number }) {
+  const getQuality = () => {
+    if (latency < 100) return { level: 3, label: 'Excellent', color: 'text-green-500' }
+    if (latency < 300) return { level: 2, label: 'Good', color: 'text-yellow-500' }
+    return { level: 1, label: 'Poor', color: 'text-red-500' }
+  }
+
+  const quality = getQuality()
+
+  return (
+    <div className={`flex items-center gap-1 ${quality.color}`}>
+      <SignalIcon className="h-4 w-4" />
+      <div className="flex gap-0.5">
+        {[1, 2, 3].map((level) => (
+          <div
+            key={level}
+            className={`w-1 rounded-sm ${
+              level <= quality.level ? 'bg-current' : 'bg-light-300'
+            }`}
+            style={{ height: `${level * 4}px` }}
+          />
+        ))}
+      </div>
+      <span className="text-xs">{latency}ms</span>
+    </div>
+  )
+}
+
 export default function VoiceDemo() {
   const [isConnected, setIsConnected] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
@@ -41,6 +124,11 @@ export default function VoiceDemo() {
   const [transcript, setTranscript] = useState<TranscriptItem[]>([])
   const [context, setContext] = useState<BorrowerContext>(DEFAULT_CONTEXT)
 
+  // New state for UI enhancements
+  const [callStartTime, setCallStartTime] = useState<Date | null>(null)
+  const [audioLevel, setAudioLevel] = useState(0)
+  const [latency, setLatency] = useState(0)
+
   const wsRef = useRef<WebSocket | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
@@ -48,6 +136,9 @@ export default function VoiceDemo() {
   const audioQueueRef = useRef<ArrayBuffer[]>([])
   const isPlayingRef = useRef(false)
   const currentSourceRef = useRef<AudioBufferSourceNode | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const animationFrameRef = useRef<number | null>(null)
+  const lastPingRef = useRef<number>(0)
 
   // Stop all audio playback
   const stopAudioPlayback = useCallback(() => {
@@ -155,6 +246,13 @@ export default function VoiceDemo() {
             stopAudioPlayback()
             setStatus('Listening...')
             break
+
+          case 'pong':
+            // Calculate latency
+            if (lastPingRef.current > 0) {
+              setLatency(Date.now() - lastPingRef.current)
+            }
+            break
         }
       } catch (err) {
         console.error('Error parsing message:', err)
@@ -177,6 +275,7 @@ export default function VoiceDemo() {
       ws.onopen = () => {
         setIsConnected(true)
         setIsConnecting(false)
+        setCallStartTime(new Date())
         setStatus('Connected - AI is greeting...')
         setIsAiSpeaking(true)
 
@@ -192,14 +291,30 @@ export default function VoiceDemo() {
             language: 'hi'
           }
         }))
+
+        // Start latency ping
+        const pingInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            lastPingRef.current = Date.now()
+            ws.send(JSON.stringify({ type: 'ping' }))
+          }
+        }, 5000)
+
+        // Store interval for cleanup
+        ;(ws as any)._pingInterval = pingInterval
       }
 
       ws.onmessage = handleMessage
 
       ws.onclose = () => {
+        // Clear ping interval
+        if ((ws as any)._pingInterval) {
+          clearInterval((ws as any)._pingInterval)
+        }
         setIsConnected(false)
         setIsRecording(false)
         setIsAiSpeaking(false)
+        setCallStartTime(null)
         setStatus('Disconnected')
         stopRecording()
       }
@@ -266,6 +381,27 @@ export default function VoiceDemo() {
       const source = audioContext.createMediaStreamSource(stream)
       const processor = audioContext.createScriptProcessor(4096, 1, 1)
 
+      // Create analyser for audio level visualization
+      const analyser = audioContext.createAnalyser()
+      analyser.fftSize = 256
+      source.connect(analyser)
+      analyserRef.current = analyser
+
+      // Start audio level monitoring
+      const updateAudioLevel = () => {
+        if (!analyserRef.current) return
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount)
+        analyser.getByteFrequencyData(dataArray)
+
+        // Calculate average level
+        const average = dataArray.reduce((sum, val) => sum + val, 0) / dataArray.length
+        setAudioLevel(average / 255)
+
+        animationFrameRef.current = requestAnimationFrame(updateAudioLevel)
+      }
+      updateAudioLevel()
+
       processor.onaudioprocess = (e) => {
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
 
@@ -295,6 +431,17 @@ export default function VoiceDemo() {
 
   // Stop recording audio
   const stopRecording = useCallback(() => {
+    // Stop audio level animation
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
+    }
+
+    // Disconnect analyser
+    if (analyserRef.current) {
+      analyserRef.current = null
+    }
+
     if (processorRef.current) {
       processorRef.current.disconnect()
       processorRef.current = null
@@ -306,6 +453,7 @@ export default function VoiceDemo() {
     }
 
     setIsRecording(false)
+    setAudioLevel(0)
     if (isConnected) {
       setStatus('Processing...')
     }
@@ -343,17 +491,21 @@ export default function VoiceDemo() {
           <Card>
             {/* Status Bar */}
             <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <div className={`w-3 h-3 rounded-full ${
-                  isConnected ? 'bg-green-500' : 'bg-red-500'
+                  isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
                 }`} />
                 <span className="text-sm text-light-600">{status}</span>
+                {isConnected && <CallTimer startTime={callStartTime} />}
               </div>
-              {isConnected && (
-                <span className="text-xs text-light-400">
-                  Speaking with: {context.borrower_name}
-                </span>
-              )}
+              <div className="flex items-center gap-4">
+                {isConnected && <ConnectionQuality latency={latency || 50} />}
+                {isConnected && (
+                  <span className="text-xs text-light-400">
+                    {context.borrower_name}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Call Controls */}
@@ -385,6 +537,11 @@ export default function VoiceDemo() {
                       <span className="text-sm">Processing...</span>
                     </div>
                   )}
+
+                  {/* Audio Waveform */}
+                  <div className="h-8 w-32 mb-2">
+                    <AudioWaveform audioLevel={audioLevel} isActive={isRecording} />
+                  </div>
 
                   {/* Mic Button */}
                   <button
