@@ -133,70 +133,69 @@ export default function VoiceDemo() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const processorRef = useRef<ScriptProcessorNode | null>(null)
-  const audioQueueRef = useRef<ArrayBuffer[]>([])
+  const audioChunksRef = useRef<ArrayBuffer[]>([])  // Accumulate chunks for one message
   const isPlayingRef = useRef(false)
-  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null)
+  const audioElementRef = useRef<HTMLAudioElement | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const lastPingRef = useRef<number>(0)
 
   // Stop all audio playback
   const stopAudioPlayback = useCallback(() => {
-    // Stop current audio source
-    if (currentSourceRef.current) {
-      try {
-        currentSourceRef.current.stop()
-      } catch {
-        // Ignore if already stopped
-      }
-      currentSourceRef.current = null
+    // Stop audio element
+    if (audioElementRef.current) {
+      audioElementRef.current.pause()
+      audioElementRef.current.src = ''
+      audioElementRef.current = null
     }
-    // Clear queue
-    audioQueueRef.current = []
+    // Clear accumulated chunks
+    audioChunksRef.current = []
     isPlayingRef.current = false
     setIsAiSpeaking(false)
   }, [])
 
-  // Play audio from queue
-  const playNextAudio = useCallback(async () => {
-    if (isPlayingRef.current || audioQueueRef.current.length === 0) return
+  // Play accumulated audio chunks as MP3
+  const playAccumulatedAudio = useCallback(() => {
+    if (audioChunksRef.current.length === 0) return
+
+    // Combine all chunks into a single blob
+    const blob = new Blob(audioChunksRef.current, { type: 'audio/mpeg' })
+    audioChunksRef.current = []
+
+    const url = URL.createObjectURL(blob)
+    const audio = new Audio(url)
+    audioElementRef.current = audio
+
+    audio.onended = () => {
+      URL.revokeObjectURL(url)
+      audioElementRef.current = null
+      isPlayingRef.current = false
+      setIsAiSpeaking(false)
+    }
+
+    audio.onerror = (err) => {
+      console.error('Audio playback error:', err)
+      URL.revokeObjectURL(url)
+      audioElementRef.current = null
+      isPlayingRef.current = false
+      setIsAiSpeaking(false)
+    }
 
     isPlayingRef.current = true
-    const audioData = audioQueueRef.current.shift()!
-
-    try {
-      const audioContext = audioContextRef.current || new AudioContext()
-      if (!audioContextRef.current) audioContextRef.current = audioContext
-
-      const audioBuffer = await audioContext.decodeAudioData(audioData.slice(0))
-      const source = audioContext.createBufferSource()
-      source.buffer = audioBuffer
-      source.connect(audioContext.destination)
-      currentSourceRef.current = source
-
-      source.onended = () => {
-        currentSourceRef.current = null
-        isPlayingRef.current = false
-        playNextAudio()
-      }
-
-      source.start()
-    } catch (err) {
-      console.error('Error playing audio:', err)
-      currentSourceRef.current = null
+    audio.play().catch(err => {
+      console.error('Error starting audio:', err)
       isPlayingRef.current = false
-      playNextAudio()
-    }
+      setIsAiSpeaking(false)
+    })
   }, [])
 
   // Handle incoming WebSocket messages
   const handleMessage = useCallback(async (event: MessageEvent) => {
     if (event.data instanceof Blob) {
-      // Audio data from AI
+      // Audio data from AI - accumulate chunks
       const arrayBuffer = await event.data.arrayBuffer()
-      audioQueueRef.current.push(arrayBuffer)
+      audioChunksRef.current.push(arrayBuffer)
       setIsAiSpeaking(true)
-      playNextAudio()
     } else {
       // JSON message
       try {
@@ -204,7 +203,8 @@ export default function VoiceDemo() {
 
         switch (msg.type) {
           case 'greeting_complete':
-            setIsAiSpeaking(false)
+            // Play accumulated greeting audio
+            playAccumulatedAudio()
             setStatus('Ready - Hold mic button to speak')
             break
 
@@ -222,8 +222,9 @@ export default function VoiceDemo() {
             break
 
           case 'response_complete':
+            // Play accumulated response audio
+            playAccumulatedAudio()
             setIsProcessing(false)
-            setIsAiSpeaking(false)
             setStatus('Ready - Hold mic button to speak')
             break
 
@@ -258,7 +259,7 @@ export default function VoiceDemo() {
         console.error('Error parsing message:', err)
       }
     }
-  }, [playNextAudio, stopAudioPlayback])
+  }, [playAccumulatedAudio, stopAudioPlayback])
 
   // Connect to WebSocket
   const connect = useCallback(async () => {
@@ -469,9 +470,9 @@ export default function VoiceDemo() {
     }
   }, [disconnect])
 
-  // Handle AI speaking state based on audio queue
+  // Handle AI speaking state based on audio playback
   useEffect(() => {
-    if (audioQueueRef.current.length === 0 && !isPlayingRef.current) {
+    if (audioChunksRef.current.length === 0 && !isPlayingRef.current) {
       setIsAiSpeaking(false)
     }
   }, [transcript])
@@ -481,7 +482,7 @@ export default function VoiceDemo() {
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-light-900">AI Voice Demo</h1>
         <p className="mt-1 text-xs sm:text-sm text-light-500">
-          Test real-time AI voice conversations with Pooja
+          Test real-time AI voice conversations with Priya
         </p>
       </div>
 
@@ -526,7 +527,7 @@ export default function VoiceDemo() {
                   {isAiSpeaking && (
                     <div className="flex items-center gap-2 text-primary-600">
                       <SpeakerWaveIcon className="h-5 w-5 animate-pulse" />
-                      <span className="text-sm font-medium">Pooja is speaking...</span>
+                      <span className="text-sm font-medium">Priya is speaking...</span>
                     </div>
                   )}
 
@@ -611,7 +612,7 @@ export default function VoiceDemo() {
                         }`}
                       >
                         <p className="text-xs font-medium mb-1 opacity-70">
-                          {item.role === 'user' ? 'You' : 'Pooja'}
+                          {item.role === 'user' ? 'You' : 'Priya'}
                         </p>
                         <p className="text-sm">{item.text}</p>
                       </div>
@@ -689,7 +690,7 @@ export default function VoiceDemo() {
               <ul className="text-xs text-light-500 space-y-1">
                 <li>1. Configure the borrower context</li>
                 <li>2. Click "Start Demo Call"</li>
-                <li>3. Wait for Pooja's greeting</li>
+                <li>3. Wait for Priya's greeting</li>
                 <li>4. Hold the mic button to speak</li>
                 <li>5. Release to send your message</li>
               </ul>

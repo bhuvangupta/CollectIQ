@@ -306,6 +306,7 @@ async def voice_websocket(websocket: WebSocket, session_id: str):
                 if "bytes" in data:
                     # Audio data from client
                     audio_chunk = data["bytes"]
+                    print(f"[{session_id}] Received {len(audio_chunk)} bytes of audio", flush=True)
 
                     # Check if this will interrupt AI speech
                     was_speaking = pipeline.is_ai_speaking
@@ -318,42 +319,49 @@ async def voice_websocket(websocket: WebSocket, session_id: str):
                         await websocket.send_json({"type": "interrupted"})
 
                     if result and result.user_text:
-                        # Send user transcript
+                        # Send user transcript immediately
                         await websocket.send_json({
                             "type": "transcript",
                             "role": "user",
                             "text": result.user_text
                         })
 
-                        # Send processing indicator
-                        await websocket.send_json({"type": "processing"})
+                        # Define callback for when aggregation window expires
+                        async def on_aggregation_complete():
+                            try:
+                                # Generate aggregated response
+                                agg_result = await pipeline._generate_aggregated_response()
 
-                        if result.ai_response:
-                            # Send AI transcript
-                            await websocket.send_json({
-                                "type": "transcript",
-                                "role": "assistant",
-                                "text": result.ai_response
-                            })
+                                if agg_result.ai_response:
+                                    # Send AI transcript
+                                    await websocket.send_json({
+                                        "type": "transcript",
+                                        "role": "assistant",
+                                        "text": agg_result.ai_response
+                                    })
 
-                            # Stream TTS audio
-                            async for tts_chunk in pipeline.generate_tts_stream(result.ai_response):
-                                await websocket.send_bytes(tts_chunk)
+                                    # Stream TTS audio
+                                    async for tts_chunk in pipeline.generate_tts_stream(agg_result.ai_response):
+                                        await websocket.send_bytes(tts_chunk)
 
-                            # Signal response complete
-                            await websocket.send_json({
-                                "type": "response_complete",
-                                "action": result.action,
-                                "should_end": result.should_end
-                            })
+                                    # Signal response complete
+                                    await websocket.send_json({
+                                        "type": "response_complete",
+                                        "action": agg_result.action,
+                                        "should_end": agg_result.should_end
+                                    })
 
-                            # End session if dialog manager says so
-                            if result.should_end:
-                                await websocket.send_json({
-                                    "type": "session_ended",
-                                    "reason": "conversation_complete"
-                                })
-                                break
+                                    # End session if dialog manager says so
+                                    if agg_result.should_end:
+                                        await websocket.send_json({
+                                            "type": "session_ended",
+                                            "reason": "conversation_complete"
+                                        })
+                            except Exception as e:
+                                print(f"[{session_id}] Aggregation callback error: {e}")
+
+                        # Start/restart aggregation timer
+                        pipeline.start_aggregation_timer(on_aggregation_complete)
 
                 elif "text" in data:
                     # JSON message from client
@@ -378,6 +386,10 @@ async def voice_websocket(websocket: WebSocket, session_id: str):
                             await websocket.send_json({
                                 "type": "context_updated"
                             })
+
+                        elif msg_type == "ping":
+                            # Respond to keep connection alive
+                            await websocket.send_json({"type": "pong"})
 
                     except json.JSONDecodeError:
                         print(f"Invalid JSON from client: {data['text']}")

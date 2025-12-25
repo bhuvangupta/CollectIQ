@@ -2,7 +2,7 @@
 
 import asyncio
 import os
-from typing import Dict, Any, Optional, List, AsyncGenerator
+from typing import Dict, Any, Optional, List, AsyncGenerator, Callable
 from dataclasses import dataclass, field
 
 from .audio_buffer import AudioBuffer
@@ -88,8 +88,13 @@ class VoicePipeline:
         self.is_processing = False
         self.is_interrupted = False
 
-        # Language (default to Hindi for Hinglish)
-        self.language = context.get("language", "hi")
+        # Language: use "en" for Hinglish (code-mixed) - better transcription accuracy
+        self.language = context.get("language", "en")
+
+        # Utterance aggregation - collect multiple user messages before responding
+        self.pending_transcripts: List[str] = []
+        self.aggregation_task: Optional[asyncio.Task] = None
+        self.aggregation_window_ms = int(os.getenv("AGGREGATION_WINDOW_MS", "1500"))  # Wait 1.5s for more speech
 
     def interrupt(self) -> bool:
         """Interrupt AI speech (barge-in).
@@ -119,6 +124,7 @@ class VoicePipeline:
 
         # Add to buffer
         self.audio_buffer.append(audio_chunk)
+        buffer_ms = self.audio_buffer.get_duration_ms()
 
         # Convert to float32 for VAD
         float_audio = pcm16_to_float32(audio_chunk)
@@ -126,20 +132,23 @@ class VoicePipeline:
         # Check VAD
         vad_result = self.vad.process(float_audio)
 
+        # Debug: show buffer state periodically
+        if int(buffer_ms) % 500 < 100:  # Every ~500ms
+            print(f"[{self.session_id}] Buffer: {int(buffer_ms)}ms, VAD: speech={vad_result.is_speech}, end={vad_result.is_speech_end}", flush=True)
+
         # If speech ended, process the complete utterance
         if vad_result.is_speech_end:
+            print(f"[{self.session_id}] Speech end detected! Processing {int(buffer_ms)}ms of audio...", flush=True)
             return await self._process_complete_utterance()
 
         return None
 
     async def _process_complete_utterance(self) -> PipelineResult:
-        """Process a complete user utterance.
+        """Process a complete user utterance - transcribe and queue for aggregation.
 
         Returns:
-            PipelineResult with transcription and AI response
+            PipelineResult with just transcription (AI response comes later via callback)
         """
-        self.is_processing = True
-
         try:
             # Get complete audio from buffer
             pcm_audio = self.audio_buffer.get_and_reset()
@@ -155,16 +164,43 @@ class VoicePipeline:
             user_text = await self._transcribe(wav_audio)
 
             if not user_text or not user_text.strip():
-                # For testing: use a default phrase if audio couldn't be transcribed
-                if os.getenv("STT_TEST_FALLBACK"):
-                    user_text = "Haan, main sun raha hoon"
-                else:
-                    return PipelineResult(is_processing=False)
+                return PipelineResult(is_processing=False)
+
+            # Add to pending transcripts for aggregation
+            self.pending_transcripts.append(user_text.strip())
+            print(f"[{self.session_id}] Transcribed: '{user_text.strip()}' (pending: {len(self.pending_transcripts)})", flush=True)
+
+            # Return just the transcript - AI response will come via aggregation callback
+            return PipelineResult(
+                user_text=user_text,
+                is_processing=True  # Signal that we're waiting for more
+            )
+
+        except Exception as e:
+            print(f"Error processing utterance: {e}")
+            return PipelineResult(is_processing=False)
+
+    async def _generate_aggregated_response(self) -> PipelineResult:
+        """Generate AI response for all pending transcripts.
+
+        Called after aggregation window expires.
+        """
+        if not self.pending_transcripts:
+            return PipelineResult(is_processing=False)
+
+        self.is_processing = True
+
+        try:
+            # Combine all pending transcripts
+            combined_text = " ".join(self.pending_transcripts)
+            self.pending_transcripts.clear()
+
+            print(f"[{self.session_id}] Generating response for: '{combined_text}'", flush=True)
 
             # Add to conversation history
             self.conversation_history.append({
                 "role": "user",
-                "content": user_text
+                "content": combined_text
             })
 
             # Generate AI response
@@ -183,7 +219,7 @@ class VoicePipeline:
                 })
 
             return PipelineResult(
-                user_text=user_text,
+                user_text=combined_text,
                 ai_response=ai_response,
                 action=action,
                 entities=entities,
@@ -192,11 +228,39 @@ class VoicePipeline:
             )
 
         except Exception as e:
-            print(f"Error processing utterance: {e}")
+            print(f"Error generating response: {e}")
             return PipelineResult(is_processing=False)
 
         finally:
             self.is_processing = False
+
+    def start_aggregation_timer(self, callback: Callable) -> None:
+        """Start or restart the aggregation timer.
+
+        Args:
+            callback: Async function to call when timer expires
+        """
+        # Cancel existing timer if any
+        if self.aggregation_task and not self.aggregation_task.done():
+            self.aggregation_task.cancel()
+            print(f"[{self.session_id}] Reset aggregation timer", flush=True)
+
+        async def timer_callback():
+            try:
+                await asyncio.sleep(self.aggregation_window_ms / 1000.0)
+                if self.pending_transcripts:
+                    print(f"[{self.session_id}] Aggregation window expired, generating response...", flush=True)
+                    await callback()
+            except asyncio.CancelledError:
+                pass  # Timer was cancelled, new speech came in
+
+        self.aggregation_task = asyncio.create_task(timer_callback())
+
+    def cancel_aggregation_timer(self) -> None:
+        """Cancel the aggregation timer."""
+        if self.aggregation_task and not self.aggregation_task.done():
+            self.aggregation_task.cancel()
+            self.aggregation_task = None
 
     async def _transcribe(self, wav_audio: bytes) -> str:
         """Transcribe audio using STT service.
@@ -264,10 +328,11 @@ class VoicePipeline:
         self.is_interrupted = False
 
         try:
+            # Use English-India voice for natural Hinglish pronunciation
             async for chunk in self.tts_service.synthesize_stream(
                 text,
                 voice=voice,
-                language=self.language
+                language="en"  # en-IN voice handles Hinglish better
             ):
                 # Check for interrupt before yielding each chunk
                 if self.is_interrupted:
@@ -287,11 +352,8 @@ class VoicePipeline:
         """
         borrower_name = self.context.get("borrower_name", "")
 
-        # Generate appropriate greeting based on context
-        if self.language == "hi":
-            greeting = f"Namaste! Kya main {borrower_name} ji se baat kar sakti hoon?"
-        else:
-            greeting = f"Hello! Am I speaking with {borrower_name}?"
+        # Natural Hinglish greeting
+        greeting = f"Hello, {borrower_name} ji? Main Priya bol rahi hoon CollectIQ Finance se. Kaise hain aap?"
 
         # Add greeting to history
         self.conversation_history.append({
@@ -299,7 +361,8 @@ class VoicePipeline:
             "content": greeting
         })
 
-        async for chunk in self.generate_tts_stream(greeting):
+        # Use hi-IN voice for natural Indian English/Hinglish
+        async for chunk in self.generate_tts_stream(greeting, voice="female"):
             yield chunk
 
     def set_context(self, context: Dict[str, Any]) -> None:
@@ -328,3 +391,5 @@ class VoicePipeline:
         self.is_ai_speaking = False
         self.is_processing = False
         self.is_interrupted = False
+        self.pending_transcripts = []
+        self.cancel_aggregation_timer()

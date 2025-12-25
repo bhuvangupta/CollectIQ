@@ -21,17 +21,16 @@ class DialogManager:
         self,
         conversation_history: List[Dict[str, str]],
         context: Dict[str, Any],
-        language: str = "hi"
+        language: str = "en"
     ) -> Dict[str, Any]:
         """Generate AI response for collection dialog."""
-        # Build system prompt with context
+        # Build system prompt with context (always Hinglish)
         system_prompt = COLLECTION_SYSTEM_PROMPT.format(
             borrower_name=context.get("borrower_name", "Customer"),
             outstanding_amount=context.get("outstanding_amount", 0),
             dpd=context.get("dpd", 0),
             emi_amount=context.get("emi_amount", 0),
-            loan_type=context.get("loan_type", "Personal Loan"),
-            language="Hindi" if language == "hi" else "English"
+            loan_type=context.get("loan_type", "Personal Loan")
         )
 
         # Format conversation for LLM
@@ -139,10 +138,8 @@ class DialogManager:
 
     def _fallback_response(self, context: Dict, language: str) -> Dict[str, Any]:
         """Return fallback response when AI fails."""
-        if language == "hi":
-            response = f"माफ़ कीजिए, क्या आप बता सकते हैं कि आप ₹{context.get('emi_amount', 0)} की EMI कब pay कर सकते हैं?"
-        else:
-            response = f"I apologize, could you let me know when you can pay the EMI of ₹{context.get('emi_amount', 0)}?"
+        # Natural Hinglish fallback
+        response = f"Sorry, thoda repeat kar sakte hain please?"
 
         return {
             "response": response,
