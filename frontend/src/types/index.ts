@@ -135,3 +135,36 @@ export interface DashboardStats {
     active: number
   }
 }
+
+export interface AuditLog {
+  id: string
+  user_name: string | null
+  user_email: string | null
+  action: string
+  category: string
+  entity_type: string | null
+  entity_name: string | null
+  description: string | null
+  performed_at: string
+}
+
+export interface AuditLogDetail extends AuditLog {
+  user_id: string | null
+  entity_id: string | null
+  old_value: Record<string, unknown> | null
+  new_value: Record<string, unknown> | null
+  ip_address: string | null
+  created_at: string
+}
+
+export interface AuditLogAction {
+  value: string
+  label: string
+}
+
+export interface AuditLogUser {
+  id: string
+  name: string
+  email: string
+  role: string
+}

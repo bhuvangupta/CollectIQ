@@ -140,7 +140,7 @@ export default function Settings() {
 
 function ProfileSettings() {
   const user = useAuthStore((state) => state.user)
-  const setUser = useAuthStore((state) => state.setUser)
+  const updateUser = useAuthStore((state) => state.updateUser)
 
   const { register, handleSubmit } = useForm({
     defaultValues: {
@@ -156,7 +156,7 @@ function ProfileSettings() {
       return response.data
     },
     onSuccess: (data) => {
-      setUser(data)
+      updateUser(data)
       toast.success('Profile updated successfully')
     },
     onError: (error: any) => {
@@ -368,7 +368,7 @@ function SecuritySettings() {
         <Button
           type="submit"
           loading={changePassword.isPending}
-          disabled={newPasswordValue && !passwordValidation.valid}
+          disabled={!!newPasswordValue && !passwordValidation.valid}
         >
           Change Password
         </Button>
@@ -1111,7 +1111,7 @@ function TeamMemberModal({
               type="submit"
               loading={isLoading}
               className="flex-1"
-              disabled={!member && passwordValue && !passwordValidation.valid}
+              disabled={!member && !!passwordValue && !passwordValidation.valid}
             >
               {member ? 'Update' : 'Add Member'}
             </Button>

@@ -1,8 +1,10 @@
+import { useEffect } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../stores/authStore'
 import { authService } from '../services/authService'
+import type { User } from '../types'
 
 export function useLogin() {
   const navigate = useNavigate()
@@ -37,14 +39,19 @@ export function useCurrentUser() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const updateUser = useAuthStore((state) => state.updateUser)
 
-  return useQuery({
+  const query = useQuery<User>({
     queryKey: ['currentUser'],
     queryFn: authService.getCurrentUser,
     enabled: isAuthenticated,
-    onSuccess: (user) => {
-      updateUser(user)
-    },
   })
+
+  useEffect(() => {
+    if (query.data) {
+      updateUser(query.data)
+    }
+  }, [query.data, updateUser])
+
+  return query
 }
 
 export function useChangePassword() {

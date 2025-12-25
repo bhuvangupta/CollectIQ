@@ -10,6 +10,7 @@ import Campaigns from './pages/Campaigns'
 import Reports from './pages/Reports'
 import Communications from './pages/Communications'
 import Settings from './pages/Settings'
+import AuditLogs from './pages/AuditLogs'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -44,6 +45,7 @@ function App() {
           <Route path="communications" element={<Communications />} />
           <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="audit-logs" element={<AuditLogs />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

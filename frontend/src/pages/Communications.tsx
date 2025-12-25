@@ -59,14 +59,14 @@ export default function Communications() {
   })
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
+    const variants: Record<string, 'success' | 'warning' | 'danger' | 'default'> = {
       completed: 'success',
       in_progress: 'warning',
       ringing: 'warning',
       queued: 'default',
-      failed: 'error',
-      no_answer: 'error',
-      busy: 'error',
+      failed: 'danger',
+      no_answer: 'danger',
+      busy: 'danger',
     }
     return <Badge variant={variants[status] || 'default'}>{status.replace('_', ' ')}</Badge>
   }
@@ -212,7 +212,7 @@ export default function Communications() {
                     </td>
                     <td className="px-4 py-3">
                       {comm.is_ai_handled ? (
-                        <Badge variant="primary">AI</Badge>
+                        <Badge variant="info">AI</Badge>
                       ) : (
                         <span className="text-sm text-light-400">Manual</span>
                       )}

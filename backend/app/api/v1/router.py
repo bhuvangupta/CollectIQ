@@ -15,6 +15,7 @@ from app.api.v1.endpoints import (
     agent_performance,
     compliance,
     payments,
+    audit_logs,
 )
 
 api_router = APIRouter()
@@ -33,3 +34,4 @@ api_router.include_router(templates.router, prefix="/templates", tags=["Template
 api_router.include_router(agent_performance.router, prefix="/agent-performance", tags=["Agent Performance"])
 api_router.include_router(compliance.router, prefix="/compliance", tags=["Compliance"])
 api_router.include_router(payments.router, prefix="/payments", tags=["Payments"])
+api_router.include_router(audit_logs.router, prefix="/audit-logs", tags=["Audit Logs"])
