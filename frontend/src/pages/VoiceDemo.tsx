@@ -47,6 +47,24 @@ export default function VoiceDemo() {
   const processorRef = useRef<ScriptProcessorNode | null>(null)
   const audioQueueRef = useRef<ArrayBuffer[]>([])
   const isPlayingRef = useRef(false)
+  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null)
+
+  // Stop all audio playback
+  const stopAudioPlayback = useCallback(() => {
+    // Stop current audio source
+    if (currentSourceRef.current) {
+      try {
+        currentSourceRef.current.stop()
+      } catch {
+        // Ignore if already stopped
+      }
+      currentSourceRef.current = null
+    }
+    // Clear queue
+    audioQueueRef.current = []
+    isPlayingRef.current = false
+    setIsAiSpeaking(false)
+  }, [])
 
   // Play audio from queue
   const playNextAudio = useCallback(async () => {
@@ -63,8 +81,10 @@ export default function VoiceDemo() {
       const source = audioContext.createBufferSource()
       source.buffer = audioBuffer
       source.connect(audioContext.destination)
+      currentSourceRef.current = source
 
       source.onended = () => {
+        currentSourceRef.current = null
         isPlayingRef.current = false
         playNextAudio()
       }
@@ -72,6 +92,7 @@ export default function VoiceDemo() {
       source.start()
     } catch (err) {
       console.error('Error playing audio:', err)
+      currentSourceRef.current = null
       isPlayingRef.current = false
       playNextAudio()
     }
@@ -128,12 +149,18 @@ export default function VoiceDemo() {
           case 'context_updated':
             setStatus('Context updated')
             break
+
+          case 'interrupted':
+            // AI speech was interrupted by user
+            stopAudioPlayback()
+            setStatus('Listening...')
+            break
         }
       } catch (err) {
         console.error('Error parsing message:', err)
       }
     }
-  }, [playNextAudio])
+  }, [playNextAudio, stopAudioPlayback])
 
   // Connect to WebSocket
   const connect = useCallback(async () => {
@@ -211,7 +238,13 @@ export default function VoiceDemo() {
   // Start recording audio
   const startRecording = useCallback(async () => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
-    if (isAiSpeaking || isProcessing) return
+    if (isProcessing) return
+
+    // If AI is speaking, interrupt it
+    if (isAiSpeaking) {
+      wsRef.current.send(JSON.stringify({ type: 'interrupt' }))
+      stopAudioPlayback()
+    }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -258,7 +291,7 @@ export default function VoiceDemo() {
       console.error('Error accessing microphone:', err)
       setStatus('Microphone access denied')
     }
-  }, [isAiSpeaking, isProcessing])
+  }, [isAiSpeaking, isProcessing, stopAudioPlayback])
 
   // Stop recording audio
   const stopRecording = useCallback(() => {
@@ -360,12 +393,14 @@ export default function VoiceDemo() {
                     onMouseLeave={stopRecording}
                     onTouchStart={startRecording}
                     onTouchEnd={stopRecording}
-                    disabled={isAiSpeaking || isProcessing}
+                    disabled={isProcessing}
                     className={`p-6 rounded-full transition-all duration-200 ${
                       isRecording
                         ? 'bg-red-500 text-white scale-110 shadow-lg shadow-red-500/30'
-                        : isAiSpeaking || isProcessing
+                        : isProcessing
                         ? 'bg-light-200 text-light-400 cursor-not-allowed'
+                        : isAiSpeaking
+                        ? 'bg-amber-100 text-amber-600 hover:bg-amber-200 hover:scale-105 ring-2 ring-amber-300'
                         : 'bg-primary-100 text-primary-600 hover:bg-primary-200 hover:scale-105'
                     }`}
                   >
@@ -377,7 +412,11 @@ export default function VoiceDemo() {
                   </button>
 
                   <p className="text-sm text-light-500">
-                    {isRecording ? 'Release to send' : 'Hold to speak'}
+                    {isRecording
+                      ? 'Release to send'
+                      : isAiSpeaking
+                      ? 'Hold to interrupt'
+                      : 'Hold to speak'}
                   </p>
 
                   {/* End Call Button */}

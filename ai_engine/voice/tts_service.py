@@ -136,15 +136,23 @@ class TTSService:
         text: str,
         voice: str = "default",
         language: str = "hi",
+        rate: str = None,
     ):
         """Stream audio generation for real-time playback.
+
+        Args:
+            text: Text to synthesize
+            voice: Voice type or ID
+            language: Language code
+            rate: Speech rate (e.g., '+10%', '+20%' for faster)
 
         Yields audio chunks as they are generated.
         """
         voice_id = self._get_voice(language, voice)
+        rate = rate or os.getenv("TTS_RATE", "+10%")  # Slightly faster by default
 
         try:
-            communicate = edge_tts.Communicate(text=text, voice=voice_id)
+            communicate = edge_tts.Communicate(text=text, voice=voice_id, rate=rate)
 
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":

@@ -7,7 +7,7 @@ from .prompts import (
     SENTIMENT_INDICATORS,
 )
 from .guardrails import ComplianceChecker
-from ..llm import get_llm_provider, LLMProvider
+from llm import get_llm_provider, LLMProvider
 
 
 class DialogManager:

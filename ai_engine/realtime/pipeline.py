@@ -70,10 +70,15 @@ class VoicePipeline:
 
         # Audio processing
         self.audio_buffer = AudioBuffer(sample_rate=sample_rate)
+
+        # Get VAD settings from environment or use fast defaults
+        min_silence_ms = int(os.getenv("VAD_MIN_SILENCE_MS", "500"))
+        min_speech_ms = int(os.getenv("VAD_MIN_SPEECH_MS", "200"))
+
         self.vad = create_vad(
             use_silero=use_silero_vad,
-            min_speech_ms=250,
-            min_silence_ms=700,
+            min_speech_ms=min_speech_ms,
+            min_silence_ms=min_silence_ms,
             sample_rate=sample_rate
         )
 
@@ -81,9 +86,23 @@ class VoicePipeline:
         self.conversation_history: List[Dict[str, str]] = []
         self.is_ai_speaking = False
         self.is_processing = False
+        self.is_interrupted = False
 
         # Language (default to Hindi for Hinglish)
         self.language = context.get("language", "hi")
+
+    def interrupt(self) -> bool:
+        """Interrupt AI speech (barge-in).
+
+        Returns:
+            True if interrupt was triggered, False if nothing to interrupt
+        """
+        if self.is_ai_speaking:
+            self.is_interrupted = True
+            self.is_ai_speaking = False
+            print(f"[{self.session_id}] User interrupted AI speech")
+            return True
+        return False
 
     async def process_audio_chunk(self, audio_chunk: bytes) -> Optional[PipelineResult]:
         """Process incoming audio chunk.
@@ -94,9 +113,9 @@ class VoicePipeline:
         Returns:
             PipelineResult if speech ended and processing complete, else None
         """
-        # Skip if AI is speaking (barge-in handling could be added later)
+        # Allow barge-in: if AI is speaking, interrupt first
         if self.is_ai_speaking:
-            return None
+            self.interrupt()
 
         # Add to buffer
         self.audio_buffer.append(audio_chunk)
@@ -238,6 +257,7 @@ class VoicePipeline:
             return
 
         self.is_ai_speaking = True
+        self.is_interrupted = False
 
         try:
             async for chunk in self.tts_service.synthesize_stream(
@@ -245,6 +265,10 @@ class VoicePipeline:
                 voice=voice,
                 language=self.language
             ):
+                # Check for interrupt before yielding each chunk
+                if self.is_interrupted:
+                    print(f"[{self.session_id}] TTS stream interrupted")
+                    break
                 yield chunk
         except Exception as e:
             print(f"TTS error: {e}")
@@ -299,3 +323,4 @@ class VoicePipeline:
         self.conversation_history = []
         self.is_ai_speaking = False
         self.is_processing = False
+        self.is_interrupted = False

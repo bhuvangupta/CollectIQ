@@ -307,8 +307,15 @@ async def voice_websocket(websocket: WebSocket, session_id: str):
                     # Audio data from client
                     audio_chunk = data["bytes"]
 
-                    # Process through pipeline
+                    # Check if this will interrupt AI speech
+                    was_speaking = pipeline.is_ai_speaking
+
+                    # Process through pipeline (will auto-interrupt if needed)
                     result = await pipeline.process_audio_chunk(audio_chunk)
+
+                    # Notify client if AI was interrupted
+                    if was_speaking and not pipeline.is_ai_speaking:
+                        await websocket.send_json({"type": "interrupted"})
 
                     if result and result.user_text:
                         # Send user transcript
@@ -357,6 +364,13 @@ async def voice_websocket(websocket: WebSocket, session_id: str):
                         if msg_type == "end_session":
                             print(f"Client ended session {session_id}")
                             break
+
+                        elif msg_type == "interrupt":
+                            # User wants to interrupt AI speech
+                            if pipeline.interrupt():
+                                await websocket.send_json({
+                                    "type": "interrupted"
+                                })
 
                         elif msg_type == "update_context":
                             new_context = msg.get("context", {})

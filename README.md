@@ -4,8 +4,10 @@ An intelligent loan collection platform for Indian financial institutions, featu
 
 ## Features
 
-- **AI Voice Bot**: Automated collection calls using speech recognition (Whisper) and text-to-speech (Coqui XTTS)
-- **Multi-Language Support**: Hindi and English support for voice and text
+- **Real-Time AI Voice**: Live voice conversations with AI agent "Pooja" in Hinglish (Hindi-English mix)
+- **Browser Voice Demo**: Push-to-talk interface for testing AI conversations
+- **AI Voice Bot**: Automated collection calls using speech recognition (Whisper/Groq) and text-to-speech (Edge TTS)
+- **Multi-Language Support**: Hindi, English, and Hinglish support for voice and text
 - **Intelligent Dialog**: Context-aware conversations using configurable LLM (Ollama or Groq)
 - **Multi-Channel Communication**: Phone calls, SMS, and WhatsApp integration
 - **Campaign Management**: Bulk outreach campaigns with targeting and scheduling
@@ -138,7 +140,8 @@ v1/
 │       └── hooks/          # Custom hooks
 ├── ai_engine/              # AI/ML services
 │   ├── voice/              # STT/TTS services
-│   └── dialog/             # Dialog management
+│   ├── dialog/             # Dialog management
+│   └── realtime/           # Real-time voice pipeline
 ├── telephony/              # Telephony service
 │   └── services/           # Call handling
 ├── scripts/                # Bash scripts
@@ -229,6 +232,54 @@ v1/
 ./scripts/logs.sh celery
 ```
 
+## Real-Time Voice Demo
+
+The platform includes a browser-based voice demo for testing AI conversations.
+
+### Accessing the Demo
+
+1. Start all services: `./scripts/start.sh`
+2. Login as admin or manager
+3. Navigate to **Voice Demo** in the sidebar (or go to `/voice-demo`)
+
+### How It Works
+
+```
+┌─────────────────────────────────────────┐
+│         AI Voice Demo                   │
+├─────────────────────────────────────────┤
+│  Browser Mic → WebSocket → AI Engine    │
+│                                         │
+│  1. Hold microphone button to speak     │
+│  2. Release to send audio to AI         │
+│  3. AI responds in Hinglish via speaker │
+├─────────────────────────────────────────┤
+│  Voice Pipeline:                        │
+│  ├─ VAD detects speech end              │
+│  ├─ Whisper/Groq transcribes speech     │
+│  ├─ LLM generates contextual response   │
+│  └─ Edge TTS speaks response            │
+└─────────────────────────────────────────┘
+```
+
+### Configuration
+
+Configure the borrower context in the demo:
+- Borrower name, outstanding amount, EMI
+- Days past due (DPD), loan type
+- Language preference
+
+### WebSocket Endpoint
+
+```
+ws://localhost:8001/ws/voice/{session_id}
+```
+
+Protocol:
+- **Client sends**: Binary audio (16-bit PCM, 16kHz, mono)
+- **Server sends**: Binary audio (MP3) or JSON messages
+- **JSON types**: `greeting_complete`, `transcript`, `processing`, `response_complete`, `error`
+
 ## API Documentation
 
 Interactive API documentation is available at:
@@ -262,6 +313,9 @@ Key environment variables (see `.env.example`):
 | `GROQ_API_KEY` | Groq API key (required if using Groq) | - |
 | `GROQ_MODEL` | Groq LLM model to use | `qwen-qwq-32b` |
 | `GROQ_STT_MODEL` | Groq STT model to use | `whisper-large-v3-turbo` |
+| `VAD_MIN_SILENCE_MS` | Min silence before speech end | `500` |
+| `VAD_MIN_SPEECH_MS` | Min speech duration to process | `200` |
+| `TTS_RATE` | Speech rate for TTS | `+10%` |
 
 ## Compliance
 

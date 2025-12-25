@@ -2,7 +2,7 @@ import os
 from typing import Dict, Any, Optional
 import httpx
 
-from ..stt import get_stt_provider, STTProvider
+from stt import get_stt_provider, STTProvider
 
 
 class STTService:
