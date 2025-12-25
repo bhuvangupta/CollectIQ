@@ -85,8 +85,10 @@ class Settings(BaseSettings):
     groq_api_key: Optional[str] = None
     groq_model: str = "qwen-qwq-32b"
 
-    # Whisper (Speech-to-text)
+    # STT Provider
+    stt_provider: str = "whisper"  # "whisper" or "groq"
     whisper_model: str = "base"
+    groq_stt_model: str = "whisper-large-v3-turbo"
 
     # Frontend
     vite_api_url: str = "http://localhost:8000"

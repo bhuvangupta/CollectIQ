@@ -31,7 +31,9 @@ An intelligent loan collection platform for Indian financial institutions, featu
 - Recharts for visualizations
 
 ### AI/ML
-- OpenAI Whisper (large-v3) for speech-to-text
+- Configurable STT provider for speech-to-text:
+  - **Whisper** (default): Local inference with OpenAI Whisper
+  - **Groq**: Cloud API with Whisper Large v3 Turbo
 - Edge TTS (Microsoft) for text-to-speech (supports 9 Indian languages)
 - Configurable LLM provider for dialog management:
   - **Ollama** (default): Local inference with Qwen3 8B
@@ -255,8 +257,11 @@ Key environment variables (see `.env.example`):
 | `LLM_PROVIDER` | LLM provider to use | `ollama` |
 | `OLLAMA_HOST` | Ollama server URL | `http://localhost:11434` |
 | `OLLAMA_MODEL` | Ollama model to use | `qwen3:8b` |
+| `STT_PROVIDER` | Speech-to-text provider | `whisper` |
+| `WHISPER_MODEL` | Local Whisper model | `large-v3` |
 | `GROQ_API_KEY` | Groq API key (required if using Groq) | - |
-| `GROQ_MODEL` | Groq model to use | `qwen-qwq-32b` |
+| `GROQ_MODEL` | Groq LLM model to use | `qwen-qwq-32b` |
+| `GROQ_STT_MODEL` | Groq STT model to use | `whisper-large-v3-turbo` |
 
 ## Compliance
 
