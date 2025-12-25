@@ -19,7 +19,7 @@ LIVEKIT_AVAILABLE = False
 SILERO_AVAILABLE = False
 
 try:
-    from livekit import agents, rtc, api
+    from livekit import api
     from livekit.agents import AgentSession, Agent, JobContext
     from livekit.plugins import sarvam
     LIVEKIT_AVAILABLE = True
@@ -117,9 +117,6 @@ class CollectionAgent(Agent if LIVEKIT_AVAILABLE else object):
         stt = self._get_stt()
         llm = self._get_llm()
         tts = self._get_tts()
-
-        # Print configuration
-        print(f"[Agent Config] STT: Sarvam (saarika:v2) | LLM: Groq ({os.getenv('GROQ_MODEL', 'qwen/qwen3-32b')}) | TTS: Sarvam ({os.getenv('SARVAM_TTS_VOICE', 'anushka')}, bulbul:v2)")
 
         # Build agent config
         agent_config = {
@@ -284,31 +281,6 @@ class LiveKitService:
 
         return token.to_jwt()
 
-    async def create_room(self, room_name: str) -> Dict[str, Any]:
-        """Create a new LiveKit room.
-
-        Args:
-            room_name: Unique name for the room
-
-        Returns:
-            Room details including name and SID
-        """
-        if not LIVEKIT_AVAILABLE:
-            raise RuntimeError("LiveKit not installed")
-
-        lk_api = api.LiveKitAPI(self.url, self.api_key, self.api_secret)
-        try:
-            room = await lk_api.room.create_room(
-                api.CreateRoomRequest(name=room_name)
-            )
-            return {
-                "name": room.name,
-                "sid": room.sid,
-                "creation_time": room.creation_time
-            }
-        finally:
-            await lk_api.aclose()
-
     async def delete_room(self, room_name: str) -> bool:
         """Delete a LiveKit room."""
         if not LIVEKIT_AVAILABLE:
@@ -390,14 +362,14 @@ class LiveKitService:
     ) -> Dict[str, Any]:
         """Start a collection call session.
 
-        Creates a room and returns tokens for both user and agent.
+        Creates a room, dispatches agent, and returns user token.
 
         Args:
             borrower: Borrower information
             room_name: Optional room name (auto-generated if not provided)
 
         Returns:
-            Room info with access tokens
+            Room info with user access token
         """
         import uuid
 
@@ -418,21 +390,14 @@ class LiveKitService:
         # Create the room with metadata
         room = await self.create_room_with_metadata(room_name, room_metadata)
 
-        # Dispatch agent to the room
+        # Dispatch agent to the room (agent joins automatically via worker)
         await self.dispatch_agent(room_name)
 
-        # Generate tokens
+        # Generate user token
         user_token = self.create_token(
             room_name=room_name,
             participant_name=borrower.name,
             metadata=f'{{"type":"borrower","case_id":"{borrower.case_id}"}}'
-        )
-
-        agent_token = self.create_token(
-            room_name=room_name,
-            participant_name="Priya (AI Agent)",
-            is_agent=True,
-            metadata='{"type":"agent","name":"Priya"}'
         )
 
         # Store session info
@@ -448,7 +413,6 @@ class LiveKitService:
             "room_sid": room["sid"],
             "livekit_url": self.url,
             "user_token": user_token,
-            "agent_token": agent_token,
             "borrower": {
                 "name": borrower.name,
                 "case_id": borrower.case_id
@@ -487,7 +451,7 @@ def get_livekit_service() -> LiveKitService:
 
 # Agent entry point for LiveKit CLI
 if LIVEKIT_AVAILABLE:
-    from livekit.agents import Worker, WorkerOptions, cli
+    from livekit.agents import WorkerOptions, cli
 
     async def collection_agent_entrypoint(ctx: JobContext):
         """Entry point for LiveKit agent worker.
@@ -533,17 +497,10 @@ if LIVEKIT_AVAILABLE:
         print(f"[Agent] Session started")
 
         # Wait for room to disconnect (participant leaves or room closes)
-        @ctx.room.on("disconnected")
-        def on_disconnected():
-            summary = agent.get_call_summary()
-            print(f"[Agent] Call ended: {summary}")
-
-        # Keep the agent running until the room closes
-        # The session handles the conversation lifecycle
         disconnect_future = asyncio.Future()
 
         @ctx.room.on("disconnected")
-        def on_room_disconnected():
+        def on_disconnected():
             if not disconnect_future.done():
                 disconnect_future.set_result(True)
 
@@ -551,7 +508,7 @@ if LIVEKIT_AVAILABLE:
         try:
             await asyncio.wait_for(disconnect_future, timeout=1800)
         except asyncio.TimeoutError:
-            print("[Agent] Call timeout (30 min), ending session")
+            print("[Agent] Call timeout (30 min)")
 
         summary = agent.get_call_summary()
         print(f"[Agent] Call ended: {summary}")
