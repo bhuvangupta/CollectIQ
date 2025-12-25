@@ -50,6 +50,7 @@ An intelligent loan collection platform for Indian financial institutions, featu
 - Node.js 18+
 - PostgreSQL 15+
 - Redis
+- ffmpeg (required for Whisper STT)
 - 16GB+ RAM recommended (for AI models)
 
 ### Installation
