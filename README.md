@@ -4,24 +4,7 @@ An intelligent loan collection platform for Indian financial institutions, featu
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                        VM                               │
-│                                                         │
-│  ┌──────────┐  ┌─────────────────────┐  ┌───────────┐  │
-│  │ Frontend │  │      Backend        │  │ AI Engine │  │
-│  │  (3000)  │  │ + Telephony (8000)  │  │  (8001)   │  │
-│  └──────────┘  └─────────────────────┘  └───────────┘  │
-│                          │                      │       │
-│                   ┌──────▼──────┐              │       │
-│                   │  Postgres   │              │       │
-│                   │  + Redis    │              │       │
-│                   └─────────────┘              │       │
-└─────────────────────────────────────────────────────────┘
-                           │                      │
-                           ▼                      ▼
-                    Exotel/Gupshup        Groq/Sarvam/Ollama
-```
+![Architecture](docs/screenshots/architecture.png)
 
 ## Screenshots
 
