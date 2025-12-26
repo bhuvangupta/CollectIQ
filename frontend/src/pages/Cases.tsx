@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { MagnifyingGlassIcon, FunnelIcon, PlusIcon } from '@heroicons/react/24/outline'
+import { MagnifyingGlassIcon, FunnelIcon, PlusIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline'
 import { useCases, useCaseStats, useCreateCase } from '../hooks/useCases'
 import api from '../services/api'
 import Card from '../components/ui/Card'
@@ -10,6 +10,7 @@ import Button from '../components/ui/Button'
 import Table, { Pagination } from '../components/ui/Table'
 import { StatusBadge, PriorityBadge } from '../components/ui/Badge'
 import Modal from '../components/ui/Modal'
+import UploadModal from '../components/UploadModal'
 import type { Case, Loan, PaginatedResponse } from '../types'
 
 interface CaseFormData {
@@ -32,6 +33,7 @@ export default function Cases() {
   const [hasFollowUp, setHasFollowUp] = useState<string>('')
   const [sortBy, setSortBy] = useState<string>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [uploadModalOpen, setUploadModalOpen] = useState(false)
 
   const createCase = useCreateCase()
 
@@ -170,10 +172,17 @@ export default function Cases() {
             Manage and track collection cases
           </p>
         </div>
-        <Button className="self-start sm:self-auto" onClick={() => setModalOpen(true)}>
-          <PlusIcon className="h-4 w-4" />
-          Create Case
-        </Button>
+        <div className="flex gap-2 self-start sm:self-auto">
+          <Button variant="secondary" onClick={() => setUploadModalOpen(true)}>
+            <ArrowUpTrayIcon className="h-4 w-4" />
+            <span className="hidden sm:inline">Import</span>
+          </Button>
+          <Button onClick={() => setModalOpen(true)}>
+            <PlusIcon className="h-4 w-4" />
+            <span className="hidden sm:inline">Create Case</span>
+            <span className="sm:hidden">New</span>
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -444,6 +453,13 @@ export default function Cases() {
           </div>
         </form>
       </Modal>
+
+      {/* Upload Modal */}
+      <UploadModal
+        isOpen={uploadModalOpen}
+        onClose={() => setUploadModalOpen(false)}
+        type="cases"
+      />
     </div>
   )
 }

@@ -1,7 +1,6 @@
-import { useState, useRef } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import toast from 'react-hot-toast'
 import { MagnifyingGlassIcon, ArrowUpTrayIcon, PlusIcon, UsersIcon } from '@heroicons/react/24/outline'
 import api from '../services/api'
 import Card from '../components/ui/Card'
@@ -10,6 +9,7 @@ import Table, { Pagination } from '../components/ui/Table'
 import Badge from '../components/ui/Badge'
 import Modal from '../components/ui/Modal'
 import Input from '../components/ui/Input'
+import UploadModal from '../components/UploadModal'
 import { useCreateBorrower } from '../hooks/useBorrowers'
 import type { Borrower, PaginatedResponse } from '../types'
 
@@ -26,32 +26,9 @@ export default function Borrowers() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
-  const [importModalOpen, setImportModalOpen] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const queryClient = useQueryClient()
+  const [uploadModalOpen, setUploadModalOpen] = useState(false)
 
   const createBorrower = useCreateBorrower()
-
-  const importBorrowers = useMutation({
-    mutationFn: async (file: File) => {
-      const formData = new FormData()
-      formData.append('file', file)
-      const response = await api.post('/borrowers/import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      return response.data
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['borrowers'] })
-      toast.success(`Imported ${data.imported} borrowers, Updated ${data.updated}`)
-      setImportModalOpen(false)
-      setSelectedFile(null)
-    },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to import borrowers')
-    },
-  })
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<BorrowerFormData>()
 
@@ -162,7 +139,7 @@ export default function Borrowers() {
           </p>
         </div>
         <div className="flex gap-2 self-start sm:self-auto">
-          <Button variant="secondary" className="text-xs sm:text-sm" onClick={() => setImportModalOpen(true)}>
+          <Button variant="secondary" className="text-xs sm:text-sm" onClick={() => setUploadModalOpen(true)}>
             <ArrowUpTrayIcon className="h-4 w-4" />
             <span className="hidden sm:inline">Import</span>
           </Button>
@@ -317,64 +294,12 @@ export default function Borrowers() {
         </form>
       </Modal>
 
-      {/* Import Modal */}
-      <Modal
-        isOpen={importModalOpen}
-        onClose={() => {
-          setImportModalOpen(false)
-          setSelectedFile(null)
-        }}
-        title="Import Borrowers"
-      >
-        <div className="space-y-4">
-          <div>
-            <p className="text-sm text-light-600 mb-4">
-              Upload a CSV or Excel file with borrower data. Required columns: first_name, primary_phone.
-              Optional: last_name, email, city, state, pincode.
-            </p>
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept=".csv,.xlsx,.xls"
-              className="hidden"
-              onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-            />
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-light-300 rounded-lg p-8 text-center cursor-pointer hover:border-primary-400 transition-colors"
-            >
-              <ArrowUpTrayIcon className="h-10 w-10 mx-auto text-light-400 mb-3" />
-              {selectedFile ? (
-                <p className="text-sm text-light-700">{selectedFile.name}</p>
-              ) : (
-                <>
-                  <p className="text-sm text-light-600">Click to upload or drag and drop</p>
-                  <p className="text-xs text-light-400 mt-1">CSV, XLS, XLSX (max 10MB)</p>
-                </>
-              )}
-            </div>
-          </div>
-          <div className="flex justify-end gap-3 pt-4 border-t border-light-200">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                setImportModalOpen(false)
-                setSelectedFile(null)
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => selectedFile && importBorrowers.mutate(selectedFile)}
-              loading={importBorrowers.isPending}
-              disabled={!selectedFile}
-            >
-              Import
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      {/* Upload Modal */}
+      <UploadModal
+        isOpen={uploadModalOpen}
+        onClose={() => setUploadModalOpen(false)}
+        type="borrowers"
+      />
     </div>
   )
 }
