@@ -89,23 +89,47 @@ See [Sarvam AI Guide](sarvam-ai.md) for detailed setup.
 
 ## Voice AI Providers
 
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VOICE_AI_PROVIDER` | Voice AI provider | `mock` |
+
+Supported providers: `mock`, `bolna`, `sarvam`, `livekit`
+
+See [Voice AI Providers Guide](voice-ai-providers.md) for detailed setup.
+
+### Mock (Development)
+
+No configuration required. Simulates AI calls for testing.
+
 ### Bolna AI
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `VOICE_AI_PROVIDER` | Set to `bolna` | `bolna` |
+| `VOICE_AI_PROVIDER` | Set to `bolna` | - |
 | `BOLNA_API_KEY` | Bolna API key | (required) |
 | `BOLNA_AGENT_ID` | Bolna agent ID | (required) |
 | `VOICE_AI_WEBHOOK_URL` | Webhook URL for callbacks | (optional) |
 
-### ElevenLabs
+### Sarvam AI
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `VOICE_AI_PROVIDER` | Set to `elevenlabs` | - |
-| `ELEVENLABS_API_KEY` | ElevenLabs API key | (required) |
-| `ELEVENLABS_AGENT_ID` | ElevenLabs agent ID | (required) |
-| `ELEVENLABS_PHONE_NUMBER_ID` | Twilio phone number ID | (required) |
+| `VOICE_AI_PROVIDER` | Set to `sarvam` | - |
+| `SARVAM_API_KEY` | Sarvam API key | (required) |
+| `GROQ_API_KEY` | Groq API key for LLM | (required) |
+
+Requires Exotel for telephony (see below).
+
+### LiveKit
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VOICE_AI_PROVIDER` | Set to `livekit` | - |
+| `LIVEKIT_URL` | LiveKit server URL | (required) |
+| `LIVEKIT_API_KEY` | LiveKit API key | (required) |
+| `LIVEKIT_API_SECRET` | LiveKit API secret | (required) |
+| `SARVAM_API_KEY` | Sarvam API key for STT/TTS | (required) |
+| `GROQ_API_KEY` | Groq API key for LLM | (required) |
 
 ## Telephony
 
@@ -166,10 +190,10 @@ GROQ_API_KEY=gsk_your_api_key
 GROQ_MODEL=llama-3.1-8b-instant
 GROQ_STT_MODEL=whisper-large-v3-turbo
 
-# Voice AI - Bolna for AI phone calls
-VOICE_AI_PROVIDER=bolna     # bolna, elevenlabs, or exotel
-BOLNA_API_KEY=bn-your-api-key
-BOLNA_AGENT_ID=your-agent-id
+# Voice AI - for AI phone calls
+VOICE_AI_PROVIDER=mock      # mock, bolna, sarvam, or livekit
+# BOLNA_API_KEY=bn-your-api-key
+# BOLNA_AGENT_ID=your-agent-id
 
 # Telephony - Direct phone calls
 TELEPHONY_PROVIDER=mock     # mock or exotel
