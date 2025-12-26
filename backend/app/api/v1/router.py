@@ -16,7 +16,7 @@ from app.api.v1.endpoints import (
     compliance,
     payments,
     audit_logs,
-    bolna,
+    voice,
 )
 
 api_router = APIRouter()
@@ -36,4 +36,4 @@ api_router.include_router(agent_performance.router, prefix="/agent-performance",
 api_router.include_router(compliance.router, prefix="/compliance", tags=["Compliance"])
 api_router.include_router(payments.router, prefix="/payments", tags=["Payments"])
 api_router.include_router(audit_logs.router, prefix="/audit-logs", tags=["Audit Logs"])
-api_router.include_router(bolna.router, prefix="/voice", tags=["Voice AI"])
+api_router.include_router(voice.router, prefix="/voice", tags=["Voice AI"])

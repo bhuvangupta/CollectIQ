@@ -83,7 +83,7 @@ class Settings(BaseSettings):
 
     # Groq (LLM)
     groq_api_key: Optional[str] = None
-    groq_model: str = "qwen-qwq-32b"
+    groq_model: str = "qwen/qwen3-32b"
 
     # STT Provider
     stt_provider: str = "sarvam"  # "whisper", "groq", or "sarvam"
