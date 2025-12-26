@@ -14,6 +14,7 @@ import {
   UsersIcon,
   CheckCircleIcon,
   XCircleIcon,
+  CloudArrowUpIcon,
 } from '@heroicons/react/24/outline'
 import api from '../services/api'
 import { useAuthStore } from '../stores/authStore'
@@ -21,6 +22,7 @@ import { useChangePassword } from '../hooks/useAuth'
 import Card, { CardHeader, CardTitle } from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
+import UploadModal from '../components/UploadModal'
 
 // Password validation helper
 const validatePassword = (password: string): { valid: boolean; errors: string[] } => {
@@ -75,6 +77,7 @@ export default function Settings() {
     { id: 'profile', name: 'Profile', icon: UserCircleIcon },
     { id: 'organization', name: 'Organization', icon: BuildingOfficeIcon },
     { id: 'team', name: 'Team', icon: UsersIcon, adminOnly: true },
+    { id: 'data-import', name: 'Data Import', icon: CloudArrowUpIcon, adminOnly: true },
     { id: 'templates', name: 'Templates', icon: DocumentTextIcon },
     { id: 'security', name: 'Security', icon: ShieldCheckIcon },
     { id: 'notifications', name: 'Notifications', icon: BellIcon },
@@ -125,6 +128,9 @@ export default function Settings() {
 
       {/* Team Tab */}
       {activeTab === 'team' && user?.role === 'admin' && <TeamSettings />}
+
+      {/* Data Import Tab */}
+      {activeTab === 'data-import' && user?.role === 'admin' && <DataImportSettings />}
 
       {/* Templates Tab */}
       {activeTab === 'templates' && <TemplatesSettings />}
@@ -442,6 +448,96 @@ function NotificationSettings() {
         ))}
       </div>
     </Card>
+  )
+}
+
+function DataImportSettings() {
+  const [uploadType, setUploadType] = useState<'borrowers' | 'loans' | 'cases' | null>(null)
+
+  const importOptions = [
+    {
+      type: 'cases' as const,
+      title: 'Import Cases',
+      description: 'Upload new cases with borrower and loan data. Creates borrowers, loans, and cases in one go.',
+      icon: '📋',
+    },
+    {
+      type: 'borrowers' as const,
+      title: 'Import Borrowers',
+      description: 'Upload borrower contact information. Use this for adding new customers to the system.',
+      icon: '👥',
+    },
+    {
+      type: 'loans' as const,
+      title: 'Update Loans',
+      description: 'Update outstanding amounts, DPD, and overdue amounts for existing loans. Ideal for daily portfolio updates.',
+      icon: '💰',
+    },
+  ]
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Data Import</CardTitle>
+          <p className="text-sm text-gray-500 mt-1">
+            Import borrowers, loans, and cases via CSV files. Only administrators can access this feature.
+          </p>
+        </CardHeader>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {importOptions.map((option) => (
+            <button
+              key={option.type}
+              onClick={() => setUploadType(option.type)}
+              className="p-4 rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition-all text-left group"
+            >
+              <div className="text-2xl mb-2">{option.icon}</div>
+              <h3 className="font-medium text-gray-900 group-hover:text-primary-700">
+                {option.title}
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">{option.description}</p>
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>API Integration</CardTitle>
+        </CardHeader>
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            You can also import data programmatically using our REST API endpoints:
+          </p>
+          <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+            <div>
+              <code className="text-sm font-mono text-primary-600">POST /api/v1/upload/borrowers/bulk</code>
+              <p className="text-xs text-gray-500 mt-1">Bulk create/update borrowers via JSON</p>
+            </div>
+            <div>
+              <code className="text-sm font-mono text-primary-600">POST /api/v1/upload/loans/bulk</code>
+              <p className="text-xs text-gray-500 mt-1">Bulk create/update loans via JSON</p>
+            </div>
+            <div>
+              <code className="text-sm font-mono text-primary-600">POST /api/v1/upload/cases/bulk</code>
+              <p className="text-xs text-gray-500 mt-1">Bulk create cases with borrower and loan data</p>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500">
+            All API endpoints require admin authentication. See the API documentation for request/response formats.
+          </p>
+        </div>
+      </Card>
+
+      {uploadType && (
+        <UploadModal
+          isOpen={!!uploadType}
+          onClose={() => setUploadType(null)}
+          type={uploadType}
+        />
+      )}
+    </div>
   )
 }
 

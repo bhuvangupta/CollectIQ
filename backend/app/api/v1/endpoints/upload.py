@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, require_admin
 from app.models.user import User
 from app.models.borrower import Borrower
 from app.models.loan import Loan
@@ -361,7 +361,7 @@ async def create_case_for_loan(
 async def upload_borrowers_csv(
     file: UploadFile = File(...),
     update_existing: bool = Query(False, description="Update existing records if found"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Upload borrowers via CSV file.
@@ -439,7 +439,7 @@ async def upload_cases_csv(
     file: UploadFile = File(...),
     update_existing: bool = Query(False, description="Update existing loans if found"),
     create_cases: bool = Query(True, description="Create cases for new loans"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Upload cases via CSV file (includes borrower and loan data).
@@ -565,7 +565,7 @@ async def upload_cases_csv(
 @router.post("/borrowers/bulk", response_model=UploadResult)
 async def bulk_create_borrowers(
     request: BulkUploadRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Bulk create/update borrowers via JSON API.
@@ -632,7 +632,7 @@ async def bulk_create_borrowers(
 async def bulk_create_cases(
     request: BulkUploadRequest,
     create_cases: bool = Query(True, description="Create cases for new loans"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Bulk create cases (with borrowers and loans) via JSON API.
@@ -735,7 +735,7 @@ async def bulk_create_cases(
 async def upload_loans_csv(
     file: UploadFile = File(...),
     update_existing: bool = Query(True, description="Update existing loans if found"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Upload loans via CSV file. Links to existing borrowers.
@@ -890,7 +890,7 @@ async def upload_loans_csv(
 @router.post("/loans/bulk", response_model=UploadResult)
 async def bulk_create_loans(
     request: BulkUploadRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Bulk create/update loans via JSON API.

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { MagnifyingGlassIcon, ArrowUpTrayIcon, PlusIcon, UsersIcon } from '@heroicons/react/24/outline'
+import { MagnifyingGlassIcon, PlusIcon, UsersIcon } from '@heroicons/react/24/outline'
 import api from '../services/api'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
@@ -9,7 +9,6 @@ import Table, { Pagination } from '../components/ui/Table'
 import Badge from '../components/ui/Badge'
 import Modal from '../components/ui/Modal'
 import Input from '../components/ui/Input'
-import UploadModal from '../components/UploadModal'
 import { useCreateBorrower } from '../hooks/useBorrowers'
 import type { Borrower, PaginatedResponse } from '../types'
 
@@ -26,7 +25,6 @@ export default function Borrowers() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
-  const [uploadModalOpen, setUploadModalOpen] = useState(false)
 
   const createBorrower = useCreateBorrower()
 
@@ -138,17 +136,11 @@ export default function Borrowers() {
             Manage your borrower database
           </p>
         </div>
-        <div className="flex gap-2 self-start sm:self-auto">
-          <Button variant="secondary" className="text-xs sm:text-sm" onClick={() => setUploadModalOpen(true)}>
-            <ArrowUpTrayIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">Import</span>
-          </Button>
-          <Button className="text-xs sm:text-sm" onClick={() => setModalOpen(true)}>
-            <PlusIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">Add Borrower</span>
-            <span className="sm:hidden">Add</span>
-          </Button>
-        </div>
+        <Button className="text-xs sm:text-sm self-start sm:self-auto" onClick={() => setModalOpen(true)}>
+          <PlusIcon className="h-4 w-4" />
+          <span className="hidden sm:inline">Add Borrower</span>
+          <span className="sm:hidden">Add</span>
+        </Button>
       </div>
 
       {/* Stats Summary */}
@@ -293,13 +285,6 @@ export default function Borrowers() {
           </div>
         </form>
       </Modal>
-
-      {/* Upload Modal */}
-      <UploadModal
-        isOpen={uploadModalOpen}
-        onClose={() => setUploadModalOpen(false)}
-        type="borrowers"
-      />
     </div>
   )
 }
