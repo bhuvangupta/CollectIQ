@@ -227,6 +227,7 @@ async def get_collections_trend(
 
 @router.get("/agents/performance")
 async def get_agent_performance(
+    days: int = Query(30, ge=7, le=90),
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
     current_user: User = Depends(get_current_user),
@@ -236,7 +237,7 @@ async def get_agent_performance(
     org_id = current_user.organization_id
 
     if not date_from:
-        date_from = datetime.utcnow() - timedelta(days=30)
+        date_from = datetime.utcnow() - timedelta(days=days)
     if not date_to:
         date_to = datetime.utcnow()
 
@@ -247,7 +248,10 @@ async def get_agent_performance(
             func.sum(Communication.duration_seconds).label("total_duration"),
             func.count(case(
                 (Communication.status == "completed", 1)
-            )).label("connected_calls")
+            )).label("connected_calls"),
+            func.count(case(
+                (Communication.outcome == "promise_to_pay", 1)
+            )).label("promises_secured")
         )
         .where(Communication.organization_id == org_id)
         .where(Communication.channel == "call")
@@ -270,8 +274,9 @@ async def get_agent_performance(
                 "agent_id": str(row[0]),
                 "agent_name": agent.full_name,
                 "total_calls": row[1],
-                "total_duration_minutes": row[2] // 60 if row[2] else 0,
+                "talk_time_minutes": (row[2] or 0) // 60,
                 "connected_calls": row[3] or 0,
+                "promises_secured": row[4] or 0,
                 "contact_rate": round((row[3] / row[1] * 100) if row[1] else 0, 2)
             })
 
@@ -501,36 +506,70 @@ async def get_campaign_analytics(
     attempted = campaign.total_attempted
     contacted = campaign.total_contacted
     successful = campaign.total_successful
-    promises = outcomes.get("promise_to_pay", 0)
+    failed = campaign.total_failed or 0
 
-    funnel = {
-        "total_targets": total_targets,
-        "attempted": attempted,
-        "contacted": contacted,
-        "successful": successful,
-        "promises": promises,
-        "attempt_rate": round((attempted / total_targets * 100) if total_targets else 0, 2),
-        "contact_rate": round((contacted / attempted * 100) if attempted else 0, 2),
-        "success_rate": round((successful / contacted * 100) if contacted else 0, 2),
-        "promise_rate": round((promises / contacted * 100) if contacted else 0, 2)
-    }
+    # Build funnel array for frontend visualization
+    funnel_data = [
+        {"stage": "targets", "count": total_targets, "percentage": 100.0},
+        {"stage": "attempted", "count": attempted, "percentage": round((attempted / total_targets * 100) if total_targets else 0, 1)},
+        {"stage": "contacted", "count": contacted, "percentage": round((contacted / total_targets * 100) if total_targets else 0, 1)},
+        {"stage": "successful", "count": successful, "percentage": round((successful / total_targets * 100) if total_targets else 0, 1)},
+    ]
+
+    # Calculate avg duration from communications
+    avg_duration_result = await db.execute(
+        select(func.avg(Communication.duration_seconds))
+        .where(Communication.campaign_id == campaign_id)
+        .where(Communication.duration_seconds.isnot(None))
+    )
+    avg_duration = avg_duration_result.scalar() or 0
+
+    # Transform hourly data to match frontend format
+    hourly_trend = [
+        {
+            "hour": h["hour"],
+            "attempts": h["attempts"],
+            "successes": h["completed"],
+            "success_rate": round((h["completed"] / h["attempts"] * 100) if h["attempts"] else 0, 1)
+        }
+        for h in hourly
+    ]
+
+    # Transform daily data to match frontend format
+    daily_trend = [
+        {
+            "date": d["date"],
+            "attempts": d["attempts"],
+            "successes": d["completed"],
+            "success_rate": round((d["completed"] / d["attempts"] * 100) if d["attempts"] else 0, 1)
+        }
+        for d in daily
+    ]
 
     return {
-        "campaign_id": str(campaign.id),
-        "campaign_name": campaign.name,
-        "campaign_type": campaign.campaign_type,
-        "status": campaign.status,
-        "funnel": funnel,
-        "hourly_distribution": hourly,
-        "daily_trend": daily,
+        "campaign": {
+            "id": str(campaign.id),
+            "name": campaign.name,
+            "campaign_type": campaign.campaign_type,
+            "status": campaign.status,
+            "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
+            "started_at": campaign.started_at.isoformat() if campaign.started_at else None,
+            "completed_at": campaign.completed_at.isoformat() if campaign.completed_at else None
+        },
+        "stats": {
+            "total_targets": total_targets,
+            "total_attempted": attempted,
+            "total_successful": successful,
+            "total_failed": failed,
+            "success_rate": round((successful / contacted * 100) if contacted else 0, 1),
+            "avg_duration_seconds": float(avg_duration),
+            "total_cost": float(campaign.actual_cost or 0)
+        },
+        "funnel": funnel_data,
+        "hourly_trend": hourly_trend,
+        "daily_trend": daily_trend,
         "outcomes": outcomes,
-        "statuses": statuses,
-        "cost": {
-            "estimated": float(campaign.estimated_cost or 0),
-            "actual": float(campaign.actual_cost or 0),
-            "per_contact": round(float(campaign.actual_cost or 0) / contacted, 2) if contacted else 0,
-            "per_success": round(float(campaign.actual_cost or 0) / successful, 2) if successful else 0
-        }
+        "statuses": statuses
     }
 
 
@@ -540,13 +579,12 @@ async def get_campaign_analytics(
 
 @router.get("/transcripts/search")
 async def search_transcripts(
-    q: str = Query(..., min_length=2, description="Search query"),
+    query: str = Query(..., min_length=2, alias="query", description="Search query"),
     channel: Optional[str] = Query(None, description="Filter by channel: call, sms, whatsapp"),
     outcome: Optional[str] = Query(None, description="Filter by outcome"),
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -554,9 +592,10 @@ async def search_transcripts(
     from app.models.borrower import Borrower
 
     org_id = current_user.organization_id
+    q = query  # Rename to avoid conflict with sqlalchemy query
 
     # Build search query
-    query = select(Communication).where(
+    db_query = select(Communication).where(
         Communication.organization_id == org_id
     )
 
@@ -568,76 +607,82 @@ async def search_transcripts(
         Communication.message_content.ilike(f"%{q}%"),
         Communication.notes.ilike(f"%{q}%")
     )
-    query = query.where(search_filter)
+    db_query = db_query.where(search_filter)
 
     # Apply filters
     if channel:
-        query = query.where(Communication.channel == channel)
+        db_query = db_query.where(Communication.channel == channel)
     if outcome:
-        query = query.where(Communication.outcome == outcome)
+        db_query = db_query.where(Communication.outcome == outcome)
     if date_from:
-        query = query.where(Communication.initiated_at >= date_from)
+        db_query = db_query.where(Communication.initiated_at >= date_from)
     if date_to:
-        query = query.where(Communication.initiated_at <= date_to)
+        db_query = db_query.where(Communication.initiated_at <= date_to)
 
     # Get total count
-    count_query = select(func.count()).select_from(query.subquery())
+    count_query = select(func.count()).select_from(db_query.subquery())
     total = await db.scalar(count_query) or 0
 
-    # Apply pagination and ordering
-    query = query.order_by(Communication.initiated_at.desc())
-    query = query.offset((page - 1) * page_size).limit(page_size)
+    # Apply limit and ordering
+    db_query = db_query.order_by(Communication.initiated_at.desc()).limit(limit)
 
-    result = await db.execute(query)
+    result = await db.execute(db_query)
     communications = result.scalars().all()
 
-    # Build response with highlighted matches
-    items = []
+    # Build response matching frontend TranscriptSearchResult interface
+    results = []
     for comm in communications:
         # Get borrower name
-        borrower_name = None
+        borrower_name = "Unknown"
         if comm.borrower_id:
             b_result = await db.execute(
                 select(Borrower.full_name).where(Borrower.id == comm.borrower_id)
             )
-            borrower_name = b_result.scalar_one_or_none()
+            borrower_name = b_result.scalar_one_or_none() or "Unknown"
 
-        # Find matching snippet
-        snippet = None
+        # Get case info
+        case_id = None
+        case_number = None
+        if comm.case_id:
+            case_result = await db.execute(
+                select(Case.id, Case.case_number).where(Case.id == comm.case_id)
+            )
+            case_row = case_result.first()
+            if case_row:
+                case_id = str(case_row[0])
+                case_number = case_row[1]
+
+        # Find matching snippet and count matches
+        snippet = ""
+        match_count = 0
         for field in [comm.transcript, comm.ai_summary, comm.message_content, comm.notes]:
             if field and q.lower() in field.lower():
-                # Extract snippet around match
-                idx = field.lower().find(q.lower())
-                start = max(0, idx - 50)
-                end = min(len(field), idx + len(q) + 50)
-                snippet = ("..." if start > 0 else "") + field[start:end] + ("..." if end < len(field) else "")
-                break
+                # Count matches
+                match_count += field.lower().count(q.lower())
+                # Extract snippet around first match if not already found
+                if not snippet:
+                    idx = field.lower().find(q.lower())
+                    start = max(0, idx - 50)
+                    end = min(len(field), idx + len(q) + 100)
+                    snippet = ("..." if start > 0 else "") + field[start:end] + ("..." if end < len(field) else "")
 
-        items.append({
-            "id": str(comm.id),
-            "channel": comm.channel,
-            "direction": comm.direction,
-            "borrower_id": str(comm.borrower_id) if comm.borrower_id else None,
+        results.append({
+            "communication_id": str(comm.id),
+            "case_id": case_id,
+            "case_number": case_number or "N/A",
             "borrower_name": borrower_name,
-            "to_number": comm.to_number,
-            "status": comm.status,
-            "outcome": comm.outcome,
-            "disposition": comm.disposition,
-            "duration_seconds": comm.duration_seconds,
-            "is_ai_handled": comm.is_ai_handled,
+            "channel": comm.channel,
             "initiated_at": comm.initiated_at.isoformat() if comm.initiated_at else None,
-            "snippet": snippet,
-            "has_transcript": bool(comm.transcript),
-            "has_recording": bool(comm.recording_url)
+            "duration_seconds": comm.duration_seconds or 0,
+            "is_ai_handled": comm.is_ai_handled,
+            "transcript_snippet": snippet,
+            "match_count": match_count
         })
 
     return {
-        "query": q,
+        "results": results,
         "total": total,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": (total + page_size - 1) // page_size,
-        "items": items
+        "query": q
     }
 
 
