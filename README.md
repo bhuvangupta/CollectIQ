@@ -28,11 +28,17 @@ An intelligent loan collection platform for Indian financial institutions, featu
 ### Dashboard
 ![Dashboard](docs/screenshots/1_dashboard.png)
 
-### Case Management
-![Cases](docs/screenshots/3_cases.png)
+### AI Voice Calls
+![AI Calls](docs/screenshots/13_AI_Call_Test.png)
 
 ### AI Intelligence
 ![AI Intelligence](docs/screenshots/11_AI_Intelligence.png)
+
+<details>
+<summary>More Screenshots</summary>
+
+### Case Management
+![Cases](docs/screenshots/3_cases.png)
 
 ### Campaign Management
 ![Campaigns](docs/screenshots/7_New_Campaigns.png)
@@ -40,22 +46,10 @@ An intelligent loan collection platform for Indian financial institutions, featu
 ### Communications & Transcripts
 ![Communications](docs/screenshots/9_Communications_Details.png)
 
-<details>
-<summary>More Screenshots</summary>
-
-### AI Call Testing
-![AI Call Test](docs/screenshots/13_AI_Call_Test.png)
-
 ### Reports & Analytics
 ![Reports](docs/screenshots/14_Reports.png)
 
-### Audit Logs
-![Audit Logs](docs/screenshots/15_Audit_Logs.png)
-
-### Team Management
-![Team Management](docs/screenshots/17_Settings_Team_Management.png)
-
-### Data Import
+### Settings & Data Import
 ![Data Import](docs/screenshots/18_Settings_Data_Import.png)
 
 </details>
