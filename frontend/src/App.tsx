@@ -14,6 +14,7 @@ import Settings from './pages/Settings'
 import AuditLogs from './pages/AuditLogs'
 import VoiceDemo from './pages/VoiceDemo'
 import AICallTest from './pages/AICallTest'
+import AIIntelligence from './pages/AIIntelligence'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -50,6 +51,7 @@ function App() {
           <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<Settings />} />
           <Route path="audit-logs" element={<AuditLogs />} />
+          <Route path="ai-intelligence" element={<AIIntelligence />} />
           <Route path="ai-demo" element={<VoiceDemo />} />
           <Route path="ai-call-test" element={<AICallTest />} />
         </Route>

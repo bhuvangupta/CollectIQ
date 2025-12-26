@@ -18,6 +18,7 @@ from app.api.v1.endpoints import (
     audit_logs,
     voice,
     upload,
+    ml,
 )
 
 api_router = APIRouter()
@@ -39,3 +40,4 @@ api_router.include_router(payments.router, prefix="/payments", tags=["Payments"]
 api_router.include_router(audit_logs.router, prefix="/audit-logs", tags=["Audit Logs"])
 api_router.include_router(voice.router, prefix="/voice", tags=["Voice AI"])
 api_router.include_router(upload.router, prefix="/upload", tags=["Data Upload"])
+api_router.include_router(ml.router, prefix="/ml", tags=["Collection Intelligence"])

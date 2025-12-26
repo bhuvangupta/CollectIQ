@@ -25,6 +25,10 @@ from app.schemas.case import (
     CaseStatsResponse,
 )
 from app.schemas.common import PaginatedResponse
+from app.services.collection_intelligence import (
+    calculate_priority_score,
+    calculate_simple_risk_score,
+)
 
 router = APIRouter()
 
@@ -205,18 +209,39 @@ async def create_case(
             Loan.organization_id == current_user.organization_id
         )
     )
-    if not result.scalar_one_or_none():
+    loan = result.scalar_one_or_none()
+    if not loan:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Loan not found"
         )
 
+    # Calculate risk and priority from loan data
+    from decimal import Decimal
+    risk = calculate_simple_risk_score(
+        dpd=loan.dpd or 0,
+        overdue_amount=loan.overdue_amount or Decimal(0),
+        principal_amount=loan.principal_amount or Decimal(1),
+    )
+    priority = calculate_priority_score(
+        overdue_amount=loan.overdue_amount or Decimal(0),
+        principal_amount=loan.principal_amount or Decimal(1),
+        dpd=loan.dpd or 0,
+        risk_score=risk["score"],
+    )
+
     case = Case(
         organization_id=current_user.organization_id,
         case_number=generate_case_number(),
+        priority=priority["priority_level"],
+        extra_data={"ml_priority": priority},
         **case_data.model_dump()
     )
     db.add(case)
+
+    # Update loan risk score
+    loan.risk_score = risk
+
     await db.commit()
     await db.refresh(case)
 

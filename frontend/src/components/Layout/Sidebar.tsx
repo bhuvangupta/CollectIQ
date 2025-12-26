@@ -13,6 +13,7 @@ import {
   ClipboardDocumentListIcon,
   MicrophoneIcon,
   PhoneArrowUpRightIcon,
+  CpuChipIcon,
 } from '@heroicons/react/24/outline'
 import { useUIStore } from '../../stores/uiStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -24,6 +25,7 @@ const allNavigation = [
   { name: 'Borrowers', href: '/borrowers', icon: UsersIcon },
   { name: 'Campaigns', href: '/campaigns', icon: MegaphoneIcon, roles: ['admin', 'manager'] },
   { name: 'Communications', href: '/communications', icon: PhoneIcon },
+  { name: 'AI Intelligence', href: '/ai-intelligence', icon: CpuChipIcon, roles: ['admin', 'manager'] },
   { name: 'AI Demo', href: '/ai-demo', icon: MicrophoneIcon, roles: ['admin', 'manager'] },
   { name: 'AI Calls', href: '/ai-call-test', icon: PhoneArrowUpRightIcon, roles: ['admin', 'manager'] },
   { name: 'Reports', href: '/reports', icon: ChartBarIcon, roles: ['admin', 'manager'] },
