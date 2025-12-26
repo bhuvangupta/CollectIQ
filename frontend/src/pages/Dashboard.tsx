@@ -32,6 +32,7 @@ import {
 } from 'recharts'
 import api from '../services/api'
 import Card, { CardHeader, CardTitle } from '../components/ui/Card'
+import { AnimatedCounter } from '../components/ui/AnimatedCounter'
 import type { DashboardStats } from '../types'
 
 const COLORS = ['#10B981', '#06B6D4', '#F59E0B', '#EF4444', '#64748B']
@@ -196,8 +197,8 @@ export default function Dashboard() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="relative">
-          <div className="animate-spin rounded-full h-12 w-12 border-2 border-light-200 border-t-primary-500" />
-          <div className="absolute inset-0 rounded-full animate-ping opacity-20 bg-primary-500" />
+          <div className="animate-spin rounded-full h-10 w-10 border-2 border-light-200 border-t-primary-500" />
+          <div className="absolute inset-0 rounded-full animate-pulse-ring bg-primary-500/20" />
         </div>
       </div>
     )
@@ -206,7 +207,10 @@ export default function Dashboard() {
   const statCards = [
     {
       name: 'Total Outstanding',
-      value: `₹${((stats?.portfolio.total_outstanding || 0) / 100000).toFixed(1)}L`,
+      value: (stats?.portfolio.total_outstanding || 0) / 100000,
+      suffix: 'L',
+      prefix: '₹',
+      decimals: 1,
       subtext: `${stats?.portfolio.overdue_percentage || 0}% overdue`,
       icon: CurrencyRupeeIcon,
       trend: 'up',
@@ -241,8 +245,8 @@ export default function Dashboard() {
       icon: SparklesIcon,
       trend: 'up',
       trendValue: '+45.1%',
-      gradient: 'from-primary-400 to-accent-500',
-      bgGlow: 'bg-primary-500/10',
+      gradient: 'from-ai-500 to-ai-600',
+      bgGlow: 'bg-ai-500/10',
     },
   ]
 
@@ -280,16 +284,22 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {statCards.map((stat) => (
-          <Card key={stat.name} className="relative overflow-hidden" glow hover>
-            <div className={`absolute top-0 right-0 w-32 h-32 rounded-full ${stat.bgGlow} blur-2xl -translate-y-1/2 translate-x-1/2`} />
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 stagger-grid">
+        {statCards.map((stat, index) => (
+          <Card
+            key={stat.name}
+            className="relative overflow-hidden group"
+            glow
+            hover
+            style={{ animationDelay: `${index * 0.05}s` }}
+          >
+            <div className={`absolute top-0 right-0 w-32 h-32 rounded-full ${stat.bgGlow} blur-2xl -translate-y-1/2 translate-x-1/2 transition-transform duration-500 group-hover:scale-150`} />
             <div className="relative">
               <div className="flex items-start justify-between">
-                <div className={`rounded-xl bg-gradient-to-br ${stat.gradient} p-3 shadow-lg`}>
+                <div className={`rounded-xl bg-gradient-to-br ${stat.gradient} p-3 shadow-lg transition-transform duration-300 group-hover:scale-110`}>
                   <stat.icon className="h-6 w-6 text-white" />
                 </div>
-                <div className={`flex items-center gap-1 text-xs font-medium ${stat.trend === 'up' ? 'text-accent-600' : 'text-red-600'}`}>
+                <div className={`flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${stat.trend === 'up' ? 'text-accent-600 bg-accent-50' : 'text-red-600 bg-red-50'}`}>
                   {stat.trend === 'up' ? (
                     <ArrowTrendingUpIcon className="h-3 w-3" />
                   ) : (
@@ -300,7 +310,15 @@ export default function Dashboard() {
               </div>
               <div className="mt-4">
                 <p className="text-sm font-medium text-light-500">{stat.name}</p>
-                <p className="mt-1 text-3xl font-bold text-light-900">{stat.value}</p>
+                <p className="mt-1 text-3xl font-bold text-light-900 font-mono tabular-nums">
+                  <AnimatedCounter
+                    value={stat.value}
+                    prefix={stat.prefix || ''}
+                    suffix={stat.suffix || ''}
+                    decimals={stat.decimals || 0}
+                    duration={800}
+                  />
+                </p>
                 <p className="mt-1 text-sm text-light-400">{stat.subtext}</p>
               </div>
             </div>
@@ -407,18 +425,18 @@ export default function Dashboard() {
           </CardHeader>
           <div className="grid grid-cols-2 gap-3">
             {[
-              { icon: PhoneIcon, label: 'Make Call', color: 'primary', action: () => setCallModalOpen(true) },
-              { icon: FolderIcon, label: 'New Case', color: 'amber', action: () => navigate('/cases?new=true') },
-              { icon: ChartBarIcon, label: 'Campaign', color: 'accent', action: () => navigate('/campaigns?new=true') },
-              { icon: CurrencyRupeeIcon, label: 'Payment', color: 'primary', action: () => setPaymentModalOpen(true) },
+              { icon: PhoneIcon, label: 'Make Call', color: 'primary', bgColor: 'bg-primary-50', hoverBg: 'group-hover:bg-primary-100', iconColor: 'text-primary-600', action: () => setCallModalOpen(true) },
+              { icon: FolderIcon, label: 'New Case', color: 'amber', bgColor: 'bg-amber-50', hoverBg: 'group-hover:bg-amber-100', iconColor: 'text-amber-600', action: () => navigate('/cases?new=true') },
+              { icon: ChartBarIcon, label: 'Campaign', color: 'accent', bgColor: 'bg-accent-50', hoverBg: 'group-hover:bg-accent-100', iconColor: 'text-accent-600', action: () => navigate('/campaigns?new=true') },
+              { icon: CurrencyRupeeIcon, label: 'Payment', color: 'ai', bgColor: 'bg-ai-50', hoverBg: 'group-hover:bg-ai-100', iconColor: 'text-ai-600', action: () => setPaymentModalOpen(true) },
             ].map((action) => (
               <button
                 key={action.label}
                 onClick={action.action}
-                className="group flex flex-col items-center p-3 rounded-xl bg-light-50 border border-light-200 hover:border-primary-300 hover:bg-light-100 transition-all duration-200"
+                className="quick-action"
               >
-                <div className={`p-2 rounded-xl bg-${action.color}-50 group-hover:bg-${action.color}-100 transition-colors`}>
-                  <action.icon className={`h-5 w-5 text-${action.color}-600`} />
+                <div className={`quick-action-icon ${action.bgColor} ${action.hoverBg}`}>
+                  <action.icon className={`h-5 w-5 ${action.iconColor}`} />
                 </div>
                 <span className="mt-2 text-xs font-medium text-light-700 group-hover:text-light-900 transition-colors">
                   {action.label}
@@ -441,14 +459,14 @@ export default function Dashboard() {
               </button>
             </div>
           </CardHeader>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
+          <div className="space-y-2 max-h-64 overflow-y-auto scrollbar-thin">
             {(!scheduledFollowUps || scheduledFollowUps.length === 0) ? (
               <div className="text-center py-8">
                 <ClockIcon className="h-10 w-10 text-light-300 mx-auto mb-2" />
                 <p className="text-sm text-light-500">No scheduled follow-ups</p>
               </div>
             ) : (
-              scheduledFollowUps.map((caseItem: any) => {
+              scheduledFollowUps.map((caseItem: any, index: number) => {
                 const followUpDate = new Date(caseItem.next_follow_up)
                 const now = new Date()
                 const isOverdue = followUpDate < now
@@ -465,15 +483,16 @@ export default function Dashboard() {
                   <div
                     key={caseItem.id}
                     onClick={() => navigate(`/cases/${caseItem.id}`)}
-                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    className={`follow-up-item ${
                       isOverdue
-                        ? 'bg-red-50 border-red-200 hover:bg-red-100'
+                        ? 'follow-up-overdue'
                         : isToday
-                        ? 'bg-amber-50 border-amber-200 hover:bg-amber-100'
-                        : 'bg-light-50 border-light-200 hover:bg-light-100'
+                        ? 'follow-up-today'
+                        : 'follow-up-upcoming'
                     }`}
+                    style={{ animationDelay: `${index * 0.03}s` }}
                   >
-                    <div className={`p-2 rounded-lg ${
+                    <div className={`p-2 rounded-lg transition-colors ${
                       isOverdue ? 'bg-red-100' : isToday ? 'bg-amber-100' : 'bg-light-100'
                     }`}>
                       {isOverdue ? (
@@ -488,7 +507,7 @@ export default function Dashboard() {
                           {caseItem.borrower_name || caseItem.case_number}
                         </span>
                         {isOverdue && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">
                             Overdue
                           </span>
                         )}

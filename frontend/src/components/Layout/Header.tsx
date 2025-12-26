@@ -14,7 +14,6 @@ import { useUIStore } from '../../stores/uiStore'
 import { useLogout } from '../../hooks/useAuth'
 import clsx from 'clsx'
 
-// Mock notifications - in real app these would come from an API
 const mockNotifications = [
   { id: 1, type: 'success', title: 'Campaign Completed', message: 'Voice campaign "Q4 Collection" finished', time: '5 min ago' },
   { id: 2, type: 'warning', title: 'High Priority Case', message: 'Case #CS-2024-0451 needs attention', time: '1 hour ago' },
@@ -28,11 +27,11 @@ export default function Header() {
   const [searchOpen, setSearchOpen] = useState(false)
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 sm:h-16 shrink-0 items-center gap-x-2 sm:gap-x-4 border-b border-light-200 bg-white/80 backdrop-blur-xl px-3 sm:px-4 lg:px-8 shadow-sm">
+    <header className="sticky top-0 z-40 flex h-14 sm:h-16 shrink-0 items-center gap-x-2 sm:gap-x-4 border-b border-light-200/60 bg-white/70 backdrop-blur-xl px-3 sm:px-4 lg:px-8 shadow-sm">
       {/* Mobile menu button */}
       <button
         type="button"
-        className="lg:hidden -m-2.5 p-2.5 text-light-500 hover:text-light-700"
+        className="lg:hidden -m-2 p-2.5 text-light-500 hover:text-light-700 hover:bg-light-100 rounded-lg transition-all duration-200 active:scale-95"
         onClick={() => setMobileSidebarOpen(true)}
       >
         <span className="sr-only">Open sidebar</span>
@@ -40,17 +39,17 @@ export default function Header() {
       </button>
 
       {/* Divider on mobile */}
-      <div className="h-6 w-px bg-light-200 lg:hidden" />
+      <div className="h-6 w-px bg-light-200/60 lg:hidden" />
 
       <div className="flex flex-1 gap-x-2 sm:gap-x-4 self-stretch lg:gap-x-6">
         {/* Search - Desktop */}
         <div className="hidden sm:flex flex-1 items-center gap-4">
-          <div className="relative flex-1 max-w-md">
-            <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-light-400" />
+          <div className="relative flex-1 max-w-md group">
+            <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-light-400 transition-colors group-focus-within:text-primary-500" />
             <input
               type="search"
               placeholder="Search cases, borrowers..."
-              className="w-full rounded-lg bg-light-50 border border-light-200 py-2 pl-10 pr-4 text-sm text-light-900 placeholder-light-400 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors"
+              className="w-full rounded-xl bg-light-50/80 border border-light-200/60 py-2 pl-10 pr-4 text-sm text-light-900 placeholder-light-400 focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/20 focus:bg-white transition-all duration-200"
             />
           </div>
         </div>
@@ -58,16 +57,16 @@ export default function Header() {
         {/* Mobile search toggle */}
         <div className="flex flex-1 items-center sm:hidden">
           {searchOpen ? (
-            <div className="flex items-center gap-2 w-full">
+            <div className="flex items-center gap-2 w-full animate-fade-in">
               <input
                 type="search"
                 placeholder="Search..."
                 autoFocus
-                className="flex-1 rounded-lg bg-light-50 border border-light-200 py-1.5 px-3 text-sm text-light-900 placeholder-light-400 focus:outline-none focus:border-primary-500"
+                className="flex-1 rounded-xl bg-light-50 border border-light-200 py-1.5 px-3 text-sm text-light-900 placeholder-light-400 focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/20"
               />
               <button
                 onClick={() => setSearchOpen(false)}
-                className="p-1.5 text-light-500"
+                className="p-1.5 text-light-500 hover:text-light-700 rounded-lg hover:bg-light-100 transition-colors"
               >
                 <XMarkIcon className="h-5 w-5" />
               </button>
@@ -75,7 +74,7 @@ export default function Header() {
           ) : (
             <button
               onClick={() => setSearchOpen(true)}
-              className="p-1.5 text-light-500 hover:text-light-700"
+              className="p-1.5 text-light-500 hover:text-light-700 rounded-lg hover:bg-light-100 transition-all duration-200"
             >
               <MagnifyingGlassIcon className="h-5 w-5" />
             </button>
@@ -85,9 +84,9 @@ export default function Header() {
         <div className="flex items-center gap-x-2 sm:gap-x-3 lg:gap-x-4">
           {/* Notifications */}
           <Popover className="relative">
-            <Popover.Button className="relative rounded-lg p-1.5 sm:p-2 text-light-500 hover:text-light-700 hover:bg-light-100 transition-colors focus:outline-none">
+            <Popover.Button className="relative rounded-xl p-2 text-light-500 hover:text-light-700 hover:bg-light-100 transition-all duration-200 focus:outline-none active:scale-95">
               <BellIcon className="h-5 w-5" />
-              <span className="absolute right-1 top-1 sm:right-1.5 sm:top-1.5 flex h-2 w-2">
+              <span className="absolute right-1.5 top-1.5 flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-500" />
               </span>
@@ -95,24 +94,40 @@ export default function Header() {
             <Transition
               as={Fragment}
               enter="transition ease-out duration-200"
-              enterFrom="opacity-0 translate-y-1"
-              enterTo="opacity-100 translate-y-0"
+              enterFrom="opacity-0 translate-y-1 scale-95"
+              enterTo="opacity-100 translate-y-0 scale-100"
               leave="transition ease-in duration-150"
-              leaveFrom="opacity-100 translate-y-0"
-              leaveTo="opacity-0 translate-y-1"
+              leaveFrom="opacity-100 translate-y-0 scale-100"
+              leaveTo="opacity-0 translate-y-1 scale-95"
             >
-              <Popover.Panel className="absolute right-0 z-10 mt-2 w-80 origin-top-right rounded-xl bg-white border border-light-200 shadow-lg focus:outline-none">
-                <div className="px-4 py-3 border-b border-light-200">
+              <Popover.Panel className="absolute right-0 z-10 mt-2 w-80 origin-top-right rounded-2xl bg-white/95 backdrop-blur-xl border border-light-200/60 shadow-float focus:outline-none">
+                <div className="px-4 py-3 border-b border-light-200/60">
                   <p className="text-sm font-semibold text-light-900">Notifications</p>
                 </div>
-                <div className="max-h-80 overflow-y-auto">
-                  {mockNotifications.map((notification) => (
-                    <div key={notification.id} className="px-4 py-3 hover:bg-light-50 cursor-pointer border-b border-light-100 last:border-0">
+                <div className="max-h-80 overflow-y-auto scrollbar-thin">
+                  {mockNotifications.map((notification, index) => (
+                    <div
+                      key={notification.id}
+                      className="px-4 py-3 hover:bg-light-50 cursor-pointer border-b border-light-100/60 last:border-0 transition-colors duration-150"
+                      style={{ animationDelay: `${index * 0.05}s` }}
+                    >
                       <div className="flex gap-3">
-                        <div className="flex-shrink-0">
-                          {notification.type === 'success' && <CheckCircleIcon className="h-5 w-5 text-accent-500" />}
-                          {notification.type === 'warning' && <ExclamationCircleIcon className="h-5 w-5 text-amber-500" />}
-                          {notification.type === 'info' && <InformationCircleIcon className="h-5 w-5 text-primary-500" />}
+                        <div className="flex-shrink-0 mt-0.5">
+                          {notification.type === 'success' && (
+                            <div className="p-1 rounded-lg bg-accent-50">
+                              <CheckCircleIcon className="h-4 w-4 text-accent-500" />
+                            </div>
+                          )}
+                          {notification.type === 'warning' && (
+                            <div className="p-1 rounded-lg bg-amber-50">
+                              <ExclamationCircleIcon className="h-4 w-4 text-amber-500" />
+                            </div>
+                          )}
+                          {notification.type === 'info' && (
+                            <div className="p-1 rounded-lg bg-primary-50">
+                              <InformationCircleIcon className="h-4 w-4 text-primary-500" />
+                            </div>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-light-900">{notification.title}</p>
@@ -123,8 +138,8 @@ export default function Header() {
                     </div>
                   ))}
                 </div>
-                <div className="px-4 py-3 border-t border-light-200">
-                  <a href="/settings?tab=notifications" className="text-sm text-primary-600 hover:text-primary-700 font-medium">
+                <div className="px-4 py-3 border-t border-light-200/60 bg-light-50/50 rounded-b-2xl">
+                  <a href="/settings?tab=notifications" className="text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors">
                     View all notifications
                   </a>
                 </div>
@@ -133,12 +148,12 @@ export default function Header() {
           </Popover>
 
           {/* Divider */}
-          <div className="hidden sm:block h-6 w-px bg-light-200" />
+          <div className="hidden sm:block h-6 w-px bg-light-200/60" />
 
           {/* Profile dropdown */}
           <Menu as="div" className="relative">
-            <Menu.Button className="flex items-center gap-x-2 sm:gap-x-3 rounded-lg p-1 sm:p-1.5 text-sm hover:bg-light-100 transition-colors">
-              <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-sm">
+            <Menu.Button className="flex items-center gap-x-2 sm:gap-x-3 rounded-xl p-1.5 text-sm hover:bg-light-100 transition-all duration-200 focus:outline-none active:scale-[0.98]">
+              <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-sm shadow-primary-500/20 transition-transform duration-200 hover:scale-105">
                 <span className="text-xs sm:text-sm font-semibold text-white">
                   {user?.first_name?.[0]}{user?.last_name?.[0]}
                 </span>
@@ -153,19 +168,18 @@ export default function Header() {
 
             <Transition
               as={Fragment}
-              enter="transition ease-out duration-100"
-              enterFrom="transform opacity-0 scale-95"
-              enterTo="transform opacity-100 scale-100"
-              leave="transition ease-in duration-75"
-              leaveFrom="transform opacity-100 scale-100"
-              leaveTo="transform opacity-0 scale-95"
+              enter="transition ease-out duration-150"
+              enterFrom="transform opacity-0 scale-95 translate-y-1"
+              enterTo="transform opacity-100 scale-100 translate-y-0"
+              leave="transition ease-in duration-100"
+              leaveFrom="transform opacity-100 scale-100 translate-y-0"
+              leaveTo="transform opacity-0 scale-95 translate-y-1"
             >
-              <Menu.Items className="absolute right-0 z-10 mt-2 w-56 origin-top-right rounded-xl bg-white border border-light-200 py-2 shadow-lg focus:outline-none">
-                <div className="px-4 py-2 border-b border-light-200">
+              <Menu.Items className="absolute right-0 z-10 mt-2 w-56 origin-top-right rounded-2xl bg-white/95 backdrop-blur-xl border border-light-200/60 py-2 shadow-float focus:outline-none">
+                <div className="px-4 py-2 border-b border-light-200/60">
                   <p className="text-sm font-medium text-light-900">{user?.first_name} {user?.last_name}</p>
                   <p className="text-xs text-light-500 truncate">{user?.email}</p>
                 </div>
-                {/* Only show Settings for admin/manager */}
                 {user?.role && ['admin', 'manager'].includes(user.role) && (
                   <div className="py-1">
                     <Menu.Item>
@@ -173,7 +187,7 @@ export default function Header() {
                         <a
                           href="/settings"
                           className={clsx(
-                            'flex items-center gap-2 px-4 py-2 text-sm transition-colors',
+                            'flex items-center gap-2 px-4 py-2 text-sm transition-all duration-150',
                             active ? 'bg-light-50 text-light-900' : 'text-light-700'
                           )}
                         >
@@ -187,14 +201,14 @@ export default function Header() {
                     </Menu.Item>
                   </div>
                 )}
-                <div className="border-t border-light-200 py-1">
+                <div className="border-t border-light-200/60 py-1">
                   <Menu.Item>
                     {({ active }) => (
                       <button
                         onClick={logout}
                         className={clsx(
-                          'flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors',
-                          active ? 'bg-light-50 text-red-600' : 'text-light-700'
+                          'flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-all duration-150',
+                          active ? 'bg-red-50 text-red-600' : 'text-light-700'
                         )}
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

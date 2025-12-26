@@ -2,34 +2,45 @@ import { ButtonHTMLAttributes, forwardRef } from 'react'
 import clsx from 'clsx'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost'
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'ai'
   size?: 'sm' | 'md' | 'lg'
   loading?: boolean
+  icon?: boolean
 }
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'primary', size = 'md', loading, children, disabled, ...props }, ref) => {
+  ({ className, variant = 'primary', size = 'md', loading, icon, children, disabled, ...props }, ref) => {
     const baseStyles = `
-      inline-flex items-center justify-center font-medium rounded-lg
-      transition-all duration-200 ease-out
+      inline-flex items-center justify-center font-medium rounded-xl
+      transition-all duration-200 ease-snappy
       focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white
-      disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none
+      disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none disabled:hover:transform-none
+      active:scale-[0.98] active:duration-75
+      select-none
     `
 
     const variants = {
       primary: `
         bg-gradient-to-r from-primary-500 to-primary-600 text-white
-        hover:from-primary-600 hover:to-primary-700 hover:shadow-glow
+        shadow-btn shadow-primary-500/20
+        hover:from-primary-600 hover:to-primary-700
+        hover:shadow-btn-hover hover:shadow-primary-500/25
+        hover:-translate-y-0.5
         focus:ring-primary-500 border border-primary-600/20
       `,
       secondary: `
-        bg-white text-light-700 border border-light-300 shadow-sm
-        hover:bg-light-50 hover:text-light-900 hover:border-light-400
+        bg-white text-light-700 border border-light-200
+        shadow-sm
+        hover:bg-light-50 hover:text-light-900 hover:border-light-300
+        hover:shadow-md hover:-translate-y-0.5
         focus:ring-light-400
       `,
       danger: `
         bg-gradient-to-r from-red-500 to-red-600 text-white
-        hover:from-red-600 hover:to-red-700 hover:shadow-[0_0_20px_rgba(239,68,68,0.3)]
+        shadow-btn shadow-red-500/20
+        hover:from-red-600 hover:to-red-700
+        hover:shadow-btn-hover hover:shadow-red-500/25
+        hover:-translate-y-0.5
         focus:ring-red-500 border border-red-600/20
       `,
       ghost: `
@@ -37,12 +48,20 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         hover:bg-light-100 hover:text-light-900
         focus:ring-light-400
       `,
+      ai: `
+        bg-gradient-to-r from-ai-500 to-ai-600 text-white
+        shadow-btn shadow-ai-500/20
+        hover:from-ai-600 hover:to-ai-700
+        hover:shadow-btn-hover hover:shadow-ai-500/25
+        hover:-translate-y-0.5
+        focus:ring-ai-500 border border-ai-600/20
+      `,
     }
 
     const sizes = {
-      sm: 'px-3 py-1.5 text-sm gap-1.5',
-      md: 'px-4 py-2.5 text-sm gap-2',
-      lg: 'px-6 py-3 text-base gap-2',
+      sm: icon ? 'p-2' : 'px-3 py-1.5 text-sm gap-1.5',
+      md: icon ? 'p-2.5' : 'px-4 py-2.5 text-sm gap-2',
+      lg: icon ? 'p-3' : 'px-6 py-3 text-base gap-2',
     }
 
     return (
