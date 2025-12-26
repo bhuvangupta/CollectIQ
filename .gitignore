@@ -124,3 +124,7 @@ data/minio/
 
 # Misc
 todo.txt
+
+# Runtime files
+.pids
+celerybeat-schedule*
