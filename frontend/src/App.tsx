@@ -7,6 +7,7 @@ import Cases from './pages/Cases'
 import CaseDetail from './pages/CaseDetail'
 import Borrowers from './pages/Borrowers'
 import Campaigns from './pages/Campaigns'
+import CampaignDetail from './pages/CampaignDetail'
 import Reports from './pages/Reports'
 import Communications from './pages/Communications'
 import Settings from './pages/Settings'
@@ -44,6 +45,7 @@ function App() {
           <Route path="cases/:id" element={<CaseDetail />} />
           <Route path="borrowers" element={<Borrowers />} />
           <Route path="campaigns" element={<Campaigns />} />
+          <Route path="campaigns/:id" element={<CampaignDetail />} />
           <Route path="communications" element={<Communications />} />
           <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<Settings />} />

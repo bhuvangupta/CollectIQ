@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { PlusIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, ChartBarIcon } from '@heroicons/react/24/outline'
 import api from '../services/api'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
@@ -61,7 +61,12 @@ export default function Campaigns() {
       key: 'name',
       header: 'Campaign Name',
       render: (item: Campaign) => (
-        <span className="font-medium text-gray-900">{item.name}</span>
+        <Link
+          to={`/campaigns/${item.id}`}
+          className="font-medium text-primary-600 hover:text-primary-700 hover:underline"
+        >
+          {item.name}
+        </Link>
       ),
     },
     {
@@ -119,6 +124,19 @@ export default function Campaigns() {
       header: 'Created',
       render: (item: Campaign) =>
         new Date(item.created_at).toLocaleDateString(),
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (item: Campaign) => (
+        <Link
+          to={`/campaigns/${item.id}`}
+          className="p-2 rounded-lg hover:bg-light-100 text-light-500 hover:text-primary-600 inline-flex"
+          title="View Analytics"
+        >
+          <ChartBarIcon className="h-4 w-4" />
+        </Link>
+      ),
     },
   ]
 

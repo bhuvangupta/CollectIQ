@@ -352,3 +352,349 @@ async def get_disposition_breakdown(
             dispositions[disp]["sub_dispositions"][sub_disp] = count
 
     return {"dispositions": dispositions}
+
+
+# ============================================================================
+# Campaign Analytics
+# ============================================================================
+
+@router.get("/campaigns/overview")
+async def get_campaigns_overview(
+    days: int = Query(30, ge=7, le=90),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get overview analytics for all campaigns."""
+    org_id = current_user.organization_id
+    start_date = datetime.utcnow() - timedelta(days=days)
+
+    # Get all campaigns in period
+    result = await db.execute(
+        select(Campaign).where(
+            Campaign.organization_id == org_id,
+            Campaign.created_at >= start_date
+        )
+    )
+    campaigns = result.scalars().all()
+
+    # Aggregate stats
+    total_campaigns = len(campaigns)
+    total_attempted = sum(c.total_attempted for c in campaigns)
+    total_contacted = sum(c.total_contacted for c in campaigns)
+    total_successful = sum(c.total_successful for c in campaigns)
+    total_cost = sum(float(c.actual_cost or 0) for c in campaigns)
+
+    # By type breakdown
+    by_type = {}
+    for c in campaigns:
+        t = c.campaign_type or "unknown"
+        if t not in by_type:
+            by_type[t] = {"count": 0, "attempted": 0, "contacted": 0, "successful": 0}
+        by_type[t]["count"] += 1
+        by_type[t]["attempted"] += c.total_attempted
+        by_type[t]["contacted"] += c.total_contacted
+        by_type[t]["successful"] += c.total_successful
+
+    # By status breakdown
+    by_status = {}
+    for c in campaigns:
+        s = c.status or "unknown"
+        if s not in by_status:
+            by_status[s] = 0
+        by_status[s] += 1
+
+    return {
+        "period_days": days,
+        "total_campaigns": total_campaigns,
+        "total_attempted": total_attempted,
+        "total_contacted": total_contacted,
+        "total_successful": total_successful,
+        "total_cost": round(total_cost, 2),
+        "overall_contact_rate": round((total_contacted / total_attempted * 100) if total_attempted else 0, 2),
+        "overall_success_rate": round((total_successful / total_contacted * 100) if total_contacted else 0, 2),
+        "cost_per_contact": round((total_cost / total_contacted) if total_contacted else 0, 2),
+        "cost_per_success": round((total_cost / total_successful) if total_successful else 0, 2),
+        "by_type": by_type,
+        "by_status": by_status
+    }
+
+
+@router.get("/campaigns/{campaign_id}/analytics")
+async def get_campaign_analytics(
+    campaign_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get detailed analytics for a specific campaign."""
+    from app.models.campaign import CampaignBorrower
+    org_id = current_user.organization_id
+
+    # Get campaign
+    result = await db.execute(
+        select(Campaign).where(
+            Campaign.id == campaign_id,
+            Campaign.organization_id == org_id
+        )
+    )
+    campaign = result.scalar_one_or_none()
+    if not campaign:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    # Get hourly breakdown
+    hourly_result = await db.execute(
+        select(
+            func.extract("hour", CampaignBorrower.last_attempt_at).label("hour"),
+            func.count(CampaignBorrower.id).label("attempts"),
+            func.sum(case((CampaignBorrower.status == "completed", 1), else_=0)).label("completed")
+        )
+        .where(CampaignBorrower.campaign_id == campaign_id)
+        .where(CampaignBorrower.last_attempt_at.isnot(None))
+        .group_by(func.extract("hour", CampaignBorrower.last_attempt_at))
+        .order_by("hour")
+    )
+    hourly = [{"hour": int(r[0]), "attempts": r[1], "completed": r[2] or 0} for r in hourly_result.all()]
+
+    # Get daily trend
+    daily_result = await db.execute(
+        select(
+            func.date(CampaignBorrower.last_attempt_at).label("date"),
+            func.count(CampaignBorrower.id).label("attempts"),
+            func.sum(case((CampaignBorrower.status == "completed", 1), else_=0)).label("completed")
+        )
+        .where(CampaignBorrower.campaign_id == campaign_id)
+        .where(CampaignBorrower.last_attempt_at.isnot(None))
+        .group_by(func.date(CampaignBorrower.last_attempt_at))
+        .order_by("date")
+    )
+    daily = [{"date": str(r[0]), "attempts": r[1], "completed": r[2] or 0} for r in daily_result.all()]
+
+    # Get outcome breakdown
+    outcome_result = await db.execute(
+        select(
+            CampaignBorrower.outcome,
+            func.count(CampaignBorrower.id)
+        )
+        .where(CampaignBorrower.campaign_id == campaign_id)
+        .where(CampaignBorrower.outcome.isnot(None))
+        .group_by(CampaignBorrower.outcome)
+    )
+    outcomes = {r[0]: r[1] for r in outcome_result.all()}
+
+    # Get status breakdown
+    status_result = await db.execute(
+        select(
+            CampaignBorrower.status,
+            func.count(CampaignBorrower.id)
+        )
+        .where(CampaignBorrower.campaign_id == campaign_id)
+        .group_by(CampaignBorrower.status)
+    )
+    statuses = {r[0]: r[1] for r in status_result.all()}
+
+    # Conversion funnel
+    total_targets = await db.scalar(
+        select(func.count(CampaignBorrower.id))
+        .where(CampaignBorrower.campaign_id == campaign_id)
+    ) or 0
+
+    attempted = campaign.total_attempted
+    contacted = campaign.total_contacted
+    successful = campaign.total_successful
+    promises = outcomes.get("promise_to_pay", 0)
+
+    funnel = {
+        "total_targets": total_targets,
+        "attempted": attempted,
+        "contacted": contacted,
+        "successful": successful,
+        "promises": promises,
+        "attempt_rate": round((attempted / total_targets * 100) if total_targets else 0, 2),
+        "contact_rate": round((contacted / attempted * 100) if attempted else 0, 2),
+        "success_rate": round((successful / contacted * 100) if contacted else 0, 2),
+        "promise_rate": round((promises / contacted * 100) if contacted else 0, 2)
+    }
+
+    return {
+        "campaign_id": str(campaign.id),
+        "campaign_name": campaign.name,
+        "campaign_type": campaign.campaign_type,
+        "status": campaign.status,
+        "funnel": funnel,
+        "hourly_distribution": hourly,
+        "daily_trend": daily,
+        "outcomes": outcomes,
+        "statuses": statuses,
+        "cost": {
+            "estimated": float(campaign.estimated_cost or 0),
+            "actual": float(campaign.actual_cost or 0),
+            "per_contact": round(float(campaign.actual_cost or 0) / contacted, 2) if contacted else 0,
+            "per_success": round(float(campaign.actual_cost or 0) / successful, 2) if successful else 0
+        }
+    }
+
+
+# ============================================================================
+# Transcript Search
+# ============================================================================
+
+@router.get("/transcripts/search")
+async def search_transcripts(
+    q: str = Query(..., min_length=2, description="Search query"),
+    channel: Optional[str] = Query(None, description="Filter by channel: call, sms, whatsapp"),
+    outcome: Optional[str] = Query(None, description="Filter by outcome"),
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Search across call transcripts and message content."""
+    from app.models.borrower import Borrower
+
+    org_id = current_user.organization_id
+
+    # Build search query
+    query = select(Communication).where(
+        Communication.organization_id == org_id
+    )
+
+    # Search in transcript, ai_summary, message_content
+    from sqlalchemy import or_
+    search_filter = or_(
+        Communication.transcript.ilike(f"%{q}%"),
+        Communication.ai_summary.ilike(f"%{q}%"),
+        Communication.message_content.ilike(f"%{q}%"),
+        Communication.notes.ilike(f"%{q}%")
+    )
+    query = query.where(search_filter)
+
+    # Apply filters
+    if channel:
+        query = query.where(Communication.channel == channel)
+    if outcome:
+        query = query.where(Communication.outcome == outcome)
+    if date_from:
+        query = query.where(Communication.initiated_at >= date_from)
+    if date_to:
+        query = query.where(Communication.initiated_at <= date_to)
+
+    # Get total count
+    count_query = select(func.count()).select_from(query.subquery())
+    total = await db.scalar(count_query) or 0
+
+    # Apply pagination and ordering
+    query = query.order_by(Communication.initiated_at.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size)
+
+    result = await db.execute(query)
+    communications = result.scalars().all()
+
+    # Build response with highlighted matches
+    items = []
+    for comm in communications:
+        # Get borrower name
+        borrower_name = None
+        if comm.borrower_id:
+            b_result = await db.execute(
+                select(Borrower.full_name).where(Borrower.id == comm.borrower_id)
+            )
+            borrower_name = b_result.scalar_one_or_none()
+
+        # Find matching snippet
+        snippet = None
+        for field in [comm.transcript, comm.ai_summary, comm.message_content, comm.notes]:
+            if field and q.lower() in field.lower():
+                # Extract snippet around match
+                idx = field.lower().find(q.lower())
+                start = max(0, idx - 50)
+                end = min(len(field), idx + len(q) + 50)
+                snippet = ("..." if start > 0 else "") + field[start:end] + ("..." if end < len(field) else "")
+                break
+
+        items.append({
+            "id": str(comm.id),
+            "channel": comm.channel,
+            "direction": comm.direction,
+            "borrower_id": str(comm.borrower_id) if comm.borrower_id else None,
+            "borrower_name": borrower_name,
+            "to_number": comm.to_number,
+            "status": comm.status,
+            "outcome": comm.outcome,
+            "disposition": comm.disposition,
+            "duration_seconds": comm.duration_seconds,
+            "is_ai_handled": comm.is_ai_handled,
+            "initiated_at": comm.initiated_at.isoformat() if comm.initiated_at else None,
+            "snippet": snippet,
+            "has_transcript": bool(comm.transcript),
+            "has_recording": bool(comm.recording_url)
+        })
+
+    return {
+        "query": q,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size,
+        "items": items
+    }
+
+
+@router.get("/transcripts/{communication_id}")
+async def get_transcript(
+    communication_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get full transcript for a communication."""
+    from app.models.borrower import Borrower
+
+    org_id = current_user.organization_id
+
+    result = await db.execute(
+        select(Communication).where(
+            Communication.id == communication_id,
+            Communication.organization_id == org_id
+        )
+    )
+    comm = result.scalar_one_or_none()
+
+    if not comm:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Communication not found")
+
+    # Get borrower info
+    borrower_name = None
+    if comm.borrower_id:
+        b_result = await db.execute(
+            select(Borrower).where(Borrower.id == comm.borrower_id)
+        )
+        borrower = b_result.scalar_one_or_none()
+        if borrower:
+            borrower_name = borrower.full_name
+
+    return {
+        "id": str(comm.id),
+        "channel": comm.channel,
+        "direction": comm.direction,
+        "borrower_id": str(comm.borrower_id) if comm.borrower_id else None,
+        "borrower_name": borrower_name,
+        "to_number": comm.to_number,
+        "from_number": comm.from_number,
+        "status": comm.status,
+        "outcome": comm.outcome,
+        "disposition": comm.disposition,
+        "sub_disposition": comm.sub_disposition,
+        "duration_seconds": comm.duration_seconds,
+        "is_ai_handled": comm.is_ai_handled,
+        "initiated_at": comm.initiated_at.isoformat() if comm.initiated_at else None,
+        "ended_at": comm.ended_at.isoformat() if comm.ended_at else None,
+        "transcript": comm.transcript,
+        "ai_summary": comm.ai_summary,
+        "ai_entities": comm.ai_entities,
+        "message_content": comm.message_content,
+        "notes": comm.notes,
+        "recording_url": comm.recording_url,
+        "sentiment": comm.sentiment
+    }
