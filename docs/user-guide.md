@@ -10,20 +10,36 @@ Quick guide to get started with the loan collection platform.
 
 ## Dashboard
 
-After login, you'll see:
+After login, you'll see the main dashboard with key metrics:
+
+![Dashboard](screenshots/1_dashboard.png)
+
 - **Total Cases** - Active collection cases
 - **Amount Due** - Total outstanding across all cases
 - **Today's Follow-ups** - Cases needing attention today
 - **Recent Activity** - Latest communications and updates
 
+![Dashboard Metrics](screenshots/2_dashboard.png)
+
 ## Managing Cases
 
 ### View Cases
-- Click **Cases** in sidebar
+
+Click **Cases** in sidebar to see all collection cases:
+
+![Cases List](screenshots/3_cases.png)
+
 - Use search to find by name, phone, or case number
 - Filter by status: Open, In Progress, Promise to Pay, Resolved
 
+### Case Filters
+
+Use advanced filters to narrow down cases:
+
+![Case Filters](screenshots/4_cases_filters.png)
+
 ### Case Details
+
 Click any case to see:
 - Borrower info and contact details
 - Loan details (amount, EMI, DPD)
@@ -31,26 +47,49 @@ Click any case to see:
 - Payment promises and follow-ups
 
 ### Update Case Status
+
 1. Open case details
 2. Click status dropdown
 3. Select new status
 4. Add notes if needed
 
+## Borrowers
+
+View and manage borrower information:
+
+![Borrowers](screenshots/5_borrowers.png)
+
 ## Making Calls
 
 ### Manual Call (Click-to-Call)
+
 1. Open a case
 2. Click the phone icon next to borrower's number
 3. Your phone will ring first, then connects to borrower
 
 ### AI Voice Call
+
 1. Go to **AI Calls** page
 2. Select a case or enter phone number
 3. Review borrower context
 4. Click **Make AI Call**
 5. AI agent handles the conversation automatically
 
+![AI Call Test](screenshots/13_AI_Call_Test.png)
+
+### Internal Voice Demo
+
+Test AI voice conversations directly in the browser:
+
+![Voice Demo](screenshots/20_Internal_AI_Call_Demo.png)
+
 ## Sending Messages
+
+### SMS & WhatsApp Templates
+
+Configure message templates:
+
+![Templates](screenshots/19_Templates_SMS_Whatsapp.png)
 
 ### SMS
 1. Open case details
@@ -64,9 +103,34 @@ Click any case to see:
 3. Select approved template
 4. Click Send
 
+## Communications
+
+### View All Communications
+
+Track all calls, SMS, and WhatsApp messages:
+
+![Communications List](screenshots/8_Communications_List.png)
+
+### Communication Details
+
+Click any communication to see full details:
+
+![Communication Details](screenshots/9_Communications_Details.png)
+
+### Search Transcripts
+
+Search through AI call transcripts:
+
+![Transcript Search](screenshots/10_Communications_Transcript_Search.png)
+
 ## Running Campaigns
 
+### View Campaigns
+
+![Campaigns](screenshots/6_Campaigns.png)
+
 ### Create Campaign
+
 1. Go to **Campaigns**
 2. Click **New Campaign**
 3. Configure:
@@ -75,14 +139,63 @@ Click any case to see:
    - Schedule and retry settings
 4. Click Create
 
+![New Campaign](screenshots/7_New_Campaigns.png)
+
 ### Monitor Campaign
+
 - View live progress on campaign detail page
 - See calls in progress, success rates, outcomes
 - Pause/resume as needed
 
-## Data Import (Admin Only)
+## AI Intelligence
 
-Admins can bulk import data via **Settings > Data Import**:
+Use AI-powered insights for collection strategy:
+
+![AI Intelligence](screenshots/11_AI_Intelligence.png)
+
+### Features
+
+- **Priority Scoring** - AI calculates case priority based on amount, DPD, risk
+- **Risk Assessment** - Identifies high-risk cases
+- **Collection Strategy** - Recommends approach based on DPD bucket
+
+### Create Campaigns from AI Strategy
+
+Quickly create targeted campaigns based on AI recommendations:
+
+![AI Strategy Campaigns](screenshots/12_AI_Strategy_Campaigns.png)
+
+## Reports
+
+View collection analytics and performance metrics:
+
+![Reports](screenshots/14_Reports.png)
+
+## Admin Features
+
+### Audit Logs
+
+Track all system activities and changes:
+
+![Audit Logs](screenshots/15_Audit_Logs.png)
+
+### Settings - Profile
+
+Update your profile and preferences:
+
+![Profile Settings](screenshots/16_Settings_Profile.png)
+
+### Team Management
+
+Manage users and roles (Admin only):
+
+![Team Management](screenshots/17_Settings_Team_Management.png)
+
+### Data Import
+
+Bulk import data via **Settings > Data Import** (Admin only):
+
+![Data Import](screenshots/18_Settings_Data_Import.png)
 
 | Import Type | Purpose |
 |-------------|---------|

@@ -23,13 +23,51 @@ An intelligent loan collection platform for Indian financial institutions, featu
                     Exotel/Gupshup        Groq/Sarvam/Ollama
 ```
 
+## Screenshots
+
+### Dashboard
+![Dashboard](docs/screenshots/1_dashboard.png)
+
+### Case Management
+![Cases](docs/screenshots/3_cases.png)
+
+### AI Intelligence
+![AI Intelligence](docs/screenshots/11_AI_Intelligence.png)
+
+### Campaign Management
+![Campaigns](docs/screenshots/7_New_Campaigns.png)
+
+### Communications & Transcripts
+![Communications](docs/screenshots/9_Communications_Details.png)
+
+<details>
+<summary>More Screenshots</summary>
+
+### AI Call Testing
+![AI Call Test](docs/screenshots/13_AI_Call_Test.png)
+
+### Reports & Analytics
+![Reports](docs/screenshots/14_Reports.png)
+
+### Audit Logs
+![Audit Logs](docs/screenshots/15_Audit_Logs.png)
+
+### Team Management
+![Team Management](docs/screenshots/17_Settings_Team_Management.png)
+
+### Data Import
+![Data Import](docs/screenshots/18_Settings_Data_Import.png)
+
+</details>
+
 ## Features
 
-- **AI Voice Calling** - Automated collection calls via [Bolna AI](docs/voice-ai-providers.md#bolna-ai-setup), [ElevenLabs](docs/voice-ai-providers.md#elevenlabs-setup), or direct [Exotel](docs/exotel.md)
+- **AI Voice Calling** - Automated collection calls via [Bolna AI](docs/voice-ai-providers.md#bolna-ai-setup), [Sarvam AI](docs/voice-ai-providers.md#sarvam-ai-setup), or [LiveKit](docs/voice-ai-providers.md#livekit-setup)
 - **Real-Time Voice Demo** - Browser-based [voice testing](docs/voice-demo.md) with configurable TTS (Edge/Sarvam)
 - **Multi-Language Support** - Hindi, English, and 9 Indian regional languages
 - **Multi-Channel Communication** - Phone calls, SMS, WhatsApp
 - **Campaign Automation** - Bulk calling with retry scheduling, per-campaign provider selection, and live monitoring
+- **AI Intelligence** - Priority scoring, risk assessment, and collection strategy recommendations
 - **Case Management** - Assign, track, and manage collection cases
 - **Analytics Dashboard** - Real-time metrics and agent performance
 - **Compliance Built-in** - RBI guideline compliance checking
