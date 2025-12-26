@@ -1,3 +1,4 @@
+import os
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
@@ -710,33 +711,71 @@ async def initiate_call(
             communication.notes = str(e)
             await db.commit()
     else:
-        # For non-AI calls, use telephony service
+        # For non-AI (manual) calls, use Exotel click-to-call
+        # Flow: Exotel calls agent first → agent answers → connects to customer
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                call_payload = {
-                    "phone_number": phone,
-                    "caller_id": "+919999999999",
-                    "borrower_id": str(borrower_id),
-                    "case_id": str(request.case_id) if request.case_id else None,
-                    "language": request.language,
-                    "use_ai": request.use_ai,
-                    "callback_url": f"{settings.vite_api_url}/api/v1/telephony/webhook/call-status"
-                }
-                if request.script:
-                    call_payload["script"] = request.script
+            import base64
 
+            exotel_api_key = os.getenv("EXOTEL_API_KEY")
+            exotel_api_token = os.getenv("EXOTEL_API_TOKEN")
+            exotel_sid = os.getenv("EXOTEL_SID")
+            exotel_subdomain = os.getenv("EXOTEL_SUBDOMAIN", "api")
+            exotel_caller_id = os.getenv("EXOTEL_CALLER_ID")
+            webhook_url = os.getenv("EXOTEL_WEBHOOK_URL", f"{settings.vite_api_url}/api/v1/telephony/webhook/call-status")
+
+            # Get agent's phone number for click-to-call
+            agent_phone = current_user.phone
+            if not agent_phone:
+                raise ValueError("Agent phone number not set. Update your profile to enable manual calls.")
+
+            if not all([exotel_api_key, exotel_api_token, exotel_sid, exotel_caller_id]):
+                raise ValueError("Exotel not configured. Set EXOTEL_API_KEY, EXOTEL_API_TOKEN, EXOTEL_SID, EXOTEL_CALLER_ID")
+
+            # Build auth header
+            credentials = f"{exotel_api_key}:{exotel_api_token}"
+            encoded_auth = base64.b64encode(credentials.encode()).decode()
+
+            # Prepare Exotel connect call (calls agent first, then customer)
+            call_data = {
+                "From": agent_phone,  # Agent's phone (called first)
+                "To": phone,  # Customer's phone (called second)
+                "CallerId": exotel_caller_id,
+                "TimeLimit": "1800",  # 30 min max
+                "Record": "true",
+                "StatusCallback": webhook_url,
+                "CustomField": f"case:{request.case_id}:comm:{communication.id}" if request.case_id else f"comm:{communication.id}"
+            }
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"{settings.telephony_url}/calls/initiate",
-                    json=call_payload
+                    f"https://{exotel_subdomain}.exotel.com/v1/Accounts/{exotel_sid}/Calls/connect.json",
+                    headers={
+                        "Authorization": f"Basic {encoded_auth}",
+                        "Content-Type": "application/x-www-form-urlencoded",
+                    },
+                    data=call_data
                 )
-                if response.status_code == 200:
-                    call_data = response.json()
-                    communication.call_sid = call_data.get("call_id", call_sid)
+
+                if response.status_code in [200, 201]:
+                    result = response.json()
+                    exotel_call = result.get("Call", {})
+                    communication.call_sid = exotel_call.get("Sid", call_sid)
+                    communication.external_id = exotel_call.get("Sid")
                     communication.status = "ringing"
+                    communication.from_number = agent_phone
+                    communication.notes = f"Click-to-call: Calling agent at {agent_phone}"
                     await db.commit()
+                    print(f"[Manual Call] Exotel call initiated: {exotel_call.get('Sid')}")
+                else:
+                    print(f"[Manual Call] Exotel error: {response.text}")
+                    communication.status = "failed"
+                    communication.notes = f"Exotel error: {response.text}"
+                    await db.commit()
+
         except Exception as e:
-            print(f"Telephony service error: {e}")
+            print(f"[Manual Call] Error: {e}")
             communication.status = "failed"
+            communication.notes = str(e)
             await db.commit()
 
     return InitiateCallResponse(
@@ -791,9 +830,32 @@ async def send_sms(
     db.add(communication)
     await db.commit()
 
-    # TODO: Actually send SMS via telephony service
+    # Send SMS via Exotel
+    try:
+        from app.services.messaging import get_messaging_provider
 
-    return {"message": "SMS queued successfully", "communication_id": str(communication.id)}
+        provider = get_messaging_provider()
+        result = await provider.send_sms(
+            phone_number=phone,
+            message=request.message
+        )
+
+        if result.success:
+            communication.status = "sent"
+            communication.external_id = result.message_id
+        else:
+            communication.status = "failed"
+            communication.notes = result.error
+
+        await db.commit()
+
+    except Exception as e:
+        print(f"[SMS] Error: {e}")
+        communication.status = "failed"
+        communication.notes = str(e)
+        await db.commit()
+
+    return {"message": "SMS sent", "communication_id": str(communication.id), "status": communication.status}
 
 
 @router.post("/whatsapp")
@@ -841,9 +903,33 @@ async def send_whatsapp(
     db.add(communication)
     await db.commit()
 
-    # TODO: Actually send WhatsApp via telephony service
+    # Send WhatsApp via Gupshup
+    try:
+        from app.services.messaging import get_messaging_provider
 
-    return {"message": "WhatsApp message queued", "communication_id": str(communication.id)}
+        provider = get_messaging_provider()
+        result = await provider.send_whatsapp(
+            phone_number=phone,
+            message=request.message if hasattr(request, 'message') else "",
+            template_id=request.template_id
+        )
+
+        if result.success:
+            communication.status = "sent"
+            communication.external_id = result.message_id
+        else:
+            communication.status = "failed"
+            communication.notes = result.error
+
+        await db.commit()
+
+    except Exception as e:
+        print(f"[WhatsApp] Error: {e}")
+        communication.status = "failed"
+        communication.notes = str(e)
+        await db.commit()
+
+    return {"message": "WhatsApp sent", "communication_id": str(communication.id), "status": communication.status}
 
 
 @router.get("/{comm_id}", response_model=CommunicationResponse)

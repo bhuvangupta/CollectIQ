@@ -145,6 +145,11 @@ class Settings(BaseSettings):
     livekit_api_key: Optional[str] = None
     livekit_api_secret: Optional[str] = None
 
+    # Gupshup (for WhatsApp Business API)
+    gupshup_api_key: Optional[str] = None
+    gupshup_app_name: Optional[str] = None
+    gupshup_source_number: Optional[str] = None
+
     class Config:
         env_file = os.path.join(PROJECT_ROOT, ".env")
         case_sensitive = False

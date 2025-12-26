@@ -62,8 +62,14 @@ def check_and_execute_campaigns():
                 campaign.status = "running"
                 campaign.actual_start = now
 
-            # Execute campaign calls
-            execute_campaign_batch.delay(str(campaign.id))
+            # Execute based on campaign type
+            if campaign.campaign_type in ["sms_blast"]:
+                execute_sms_campaign_batch.delay(str(campaign.id))
+            elif campaign.campaign_type in ["whatsapp_blast"]:
+                execute_whatsapp_campaign_batch.delay(str(campaign.id))
+            else:
+                # Voice campaigns (ai_voice, agent_call, voice_blast)
+                execute_campaign_batch.delay(str(campaign.id))
 
         session.commit()
 
@@ -564,6 +570,425 @@ def handle_call_completion(
         session.commit()
 
         return {"status": "success", "outcome": outcome}
+
+    finally:
+        session.close()
+
+
+# ============================================================================
+# SMS Campaign Tasks
+# ============================================================================
+
+@celery_app.task(name="app.tasks.campaign_tasks.execute_sms_campaign_batch")
+def execute_sms_campaign_batch(campaign_id: str, batch_size: int = 50):
+    """Execute a batch of SMS messages for a campaign."""
+    session = get_sync_session()
+
+    try:
+        from app.models.campaign import Campaign, CampaignBorrower
+        from app.models.borrower import Borrower
+        from app.models.loan import Loan
+
+        campaign = session.execute(
+            select(Campaign).where(Campaign.id == campaign_id)
+        ).scalar_one_or_none()
+
+        if not campaign or campaign.status != "running":
+            return {"status": "skipped", "reason": "Campaign not running"}
+
+        # Get pending borrowers
+        pending = session.execute(
+            select(CampaignBorrower).where(
+                CampaignBorrower.campaign_id == campaign_id,
+                CampaignBorrower.status == "pending"
+            )
+            .order_by(CampaignBorrower.priority.desc())
+            .limit(batch_size)
+        ).scalars().all()
+
+        if not pending:
+            campaign.status = "completed"
+            campaign.actual_end = datetime.utcnow()
+            session.commit()
+            return {"status": "completed", "reason": "No pending borrowers"}
+
+        messages_sent = 0
+
+        for cb in pending:
+            borrower = session.execute(
+                select(Borrower).where(Borrower.id == cb.borrower_id)
+            ).scalar_one_or_none()
+
+            if not borrower or borrower.do_not_sms:
+                cb.status = "skipped"
+                continue
+
+            # Get loan info for message personalization
+            loan = session.execute(
+                select(Loan).where(Loan.borrower_id == borrower.id)
+                .order_by(Loan.created_at.desc())
+            ).scalars().first()
+
+            # Queue the SMS
+            send_campaign_sms.delay(
+                str(campaign_id),
+                str(cb.id),
+                borrower.primary_phone,
+                campaign.message_template,
+                {
+                    "borrower_name": borrower.name,
+                    "outstanding_amount": str(loan.outstanding_amount) if loan else "0",
+                    "emi_amount": str(loan.emi_amount) if loan else "0",
+                    "dpd": str(loan.dpd) if loan else "0",
+                    "due_date": loan.next_due_date.strftime("%d %b %Y") if loan and loan.next_due_date else ""
+                }
+            )
+
+            cb.status = "queued"
+            cb.attempt_count += 1
+            cb.last_attempt_at = datetime.utcnow()
+            messages_sent += 1
+
+        campaign.total_attempted += messages_sent
+        session.commit()
+
+        return {"status": "success", "messages_queued": messages_sent}
+
+    finally:
+        session.close()
+
+
+@celery_app.task(name="app.tasks.campaign_tasks.send_campaign_sms")
+def send_campaign_sms(
+    campaign_id: str,
+    campaign_borrower_id: str,
+    phone_number: str,
+    message_template: str,
+    variables: dict
+):
+    """Send a single SMS for a campaign via Gupshup or Exotel."""
+    import httpx
+    import os
+    import base64
+
+    session = get_sync_session()
+
+    try:
+        # Format message with variables
+        message = message_template
+        for key, value in variables.items():
+            message = message.replace(f"{{{{{key}}}}}", str(value))
+            message = message.replace(f"{{{{ {key} }}}}", str(value))
+
+        # Determine SMS provider
+        sms_provider = os.getenv("SMS_PROVIDER", "gupshup").lower()
+        success = False
+        message_id = None
+        error_msg = None
+
+        if sms_provider == "gupshup":
+            # Send via Gupshup
+            api_key = os.getenv("GUPSHUP_API_KEY")
+            app_name = os.getenv("GUPSHUP_APP_NAME")
+
+            if not all([api_key, app_name]):
+                raise ValueError("Gupshup SMS not configured")
+
+            phone = "".join(c for c in phone_number if c.isdigit())
+            if len(phone) == 10:
+                phone = "91" + phone
+
+            response = httpx.post(
+                "https://enterprise.smsgupshup.com/GatewayAPI/rest",
+                data={
+                    "method": "SendMessage",
+                    "send_to": phone,
+                    "msg": message,
+                    "msg_type": "TEXT",
+                    "userid": app_name,
+                    "auth_scheme": "plain",
+                    "password": api_key,
+                    "v": "1.1",
+                    "format": "json"
+                },
+                timeout=30.0
+            )
+
+            if response.status_code in [200, 201]:
+                result = response.json()
+                if result.get("response", {}).get("status") == "success":
+                    success = True
+                    message_id = result.get("response", {}).get("id")
+                else:
+                    error_msg = result.get("response", {}).get("details", "Unknown error")
+            else:
+                error_msg = response.text
+
+        else:
+            # Send via Exotel (fallback)
+            api_key = os.getenv("EXOTEL_API_KEY")
+            api_token = os.getenv("EXOTEL_API_TOKEN")
+            sid = os.getenv("EXOTEL_SID")
+            subdomain = os.getenv("EXOTEL_SUBDOMAIN", "api")
+            sender_id = os.getenv("EXOTEL_SMS_SENDER_ID", "LNCOLL")
+
+            if not all([api_key, api_token, sid]):
+                raise ValueError("Exotel SMS not configured")
+
+            credentials = f"{api_key}:{api_token}"
+            encoded = base64.b64encode(credentials.encode()).decode()
+
+            response = httpx.post(
+                f"https://{subdomain}.exotel.com/v1/Accounts/{sid}/Sms/send.json",
+                headers={
+                    "Authorization": f"Basic {encoded}",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                data={
+                    "From": sender_id,
+                    "To": phone_number,
+                    "Body": message,
+                },
+                timeout=30.0
+            )
+
+            if response.status_code in [200, 201]:
+                result = response.json()
+                success = True
+                message_id = result.get("SMSMessage", {}).get("Sid")
+            else:
+                error_msg = response.text
+
+        # Update campaign borrower status
+        from app.models.campaign import CampaignBorrower
+        cb = session.execute(
+            select(CampaignBorrower).where(CampaignBorrower.id == campaign_borrower_id)
+        ).scalar_one_or_none()
+
+        if cb:
+            if success:
+                cb.status = "completed"
+                cb.outcome = "sent"
+                cb.outcome_details = {"message_id": message_id}
+            else:
+                cb.status = "failed"
+                cb.outcome = "failed"
+                cb.outcome_details = {"error": error_msg}
+
+            session.commit()
+
+        return {"success": success}
+
+    except Exception as e:
+        # Update status on error
+        try:
+            from app.models.campaign import CampaignBorrower
+            cb = session.execute(
+                select(CampaignBorrower).where(CampaignBorrower.id == campaign_borrower_id)
+            ).scalar_one_or_none()
+            if cb:
+                cb.status = "failed"
+                cb.outcome_details = {"error": str(e)}
+                session.commit()
+        except Exception:
+            pass
+        raise
+
+    finally:
+        session.close()
+
+
+# ============================================================================
+# WhatsApp Campaign Tasks
+# ============================================================================
+
+@celery_app.task(name="app.tasks.campaign_tasks.execute_whatsapp_campaign_batch")
+def execute_whatsapp_campaign_batch(campaign_id: str, batch_size: int = 50):
+    """Execute a batch of WhatsApp messages for a campaign."""
+    session = get_sync_session()
+
+    try:
+        from app.models.campaign import Campaign, CampaignBorrower
+        from app.models.borrower import Borrower
+        from app.models.loan import Loan
+
+        campaign = session.execute(
+            select(Campaign).where(Campaign.id == campaign_id)
+        ).scalar_one_or_none()
+
+        if not campaign or campaign.status != "running":
+            return {"status": "skipped", "reason": "Campaign not running"}
+
+        # Get pending borrowers
+        pending = session.execute(
+            select(CampaignBorrower).where(
+                CampaignBorrower.campaign_id == campaign_id,
+                CampaignBorrower.status == "pending"
+            )
+            .order_by(CampaignBorrower.priority.desc())
+            .limit(batch_size)
+        ).scalars().all()
+
+        if not pending:
+            campaign.status = "completed"
+            campaign.actual_end = datetime.utcnow()
+            session.commit()
+            return {"status": "completed", "reason": "No pending borrowers"}
+
+        messages_sent = 0
+
+        for cb in pending:
+            borrower = session.execute(
+                select(Borrower).where(Borrower.id == cb.borrower_id)
+            ).scalar_one_or_none()
+
+            if not borrower or borrower.do_not_whatsapp:
+                cb.status = "skipped"
+                continue
+
+            # Get loan info for message personalization
+            loan = session.execute(
+                select(Loan).where(Loan.borrower_id == borrower.id)
+                .order_by(Loan.created_at.desc())
+            ).scalars().first()
+
+            # Queue the WhatsApp message
+            send_campaign_whatsapp.delay(
+                str(campaign_id),
+                str(cb.id),
+                borrower.primary_phone,
+                campaign.whatsapp_template_id,
+                campaign.message_template,
+                {
+                    "borrower_name": borrower.name,
+                    "outstanding_amount": str(loan.outstanding_amount) if loan else "0",
+                    "emi_amount": str(loan.emi_amount) if loan else "0",
+                    "dpd": str(loan.dpd) if loan else "0",
+                    "due_date": loan.next_due_date.strftime("%d %b %Y") if loan and loan.next_due_date else ""
+                }
+            )
+
+            cb.status = "queued"
+            cb.attempt_count += 1
+            cb.last_attempt_at = datetime.utcnow()
+            messages_sent += 1
+
+        campaign.total_attempted += messages_sent
+        session.commit()
+
+        return {"status": "success", "messages_queued": messages_sent}
+
+    finally:
+        session.close()
+
+
+@celery_app.task(name="app.tasks.campaign_tasks.send_campaign_whatsapp")
+def send_campaign_whatsapp(
+    campaign_id: str,
+    campaign_borrower_id: str,
+    phone_number: str,
+    template_id: str,
+    message_template: str,
+    variables: dict
+):
+    """Send a single WhatsApp message for a campaign."""
+    import httpx
+    import os
+
+    session = get_sync_session()
+
+    try:
+        # Gupshup config
+        api_key = os.getenv("GUPSHUP_API_KEY")
+        app_name = os.getenv("GUPSHUP_APP_NAME")
+        source_number = os.getenv("GUPSHUP_SOURCE_NUMBER")
+
+        if not all([api_key, app_name, source_number]):
+            raise ValueError("Gupshup WhatsApp not configured")
+
+        # Format phone number
+        phone = "".join(c for c in phone_number if c.isdigit() or c == "+")
+        if not phone.startswith("+"):
+            if phone.startswith("91") and len(phone) == 12:
+                phone = phone
+            elif len(phone) == 10:
+                phone = "91" + phone
+        phone = phone.replace("+", "")
+
+        if template_id:
+            # Template message
+            payload = {
+                "channel": "whatsapp",
+                "source": source_number,
+                "destination": phone,
+                "template": {
+                    "id": template_id,
+                    "params": list(variables.values())
+                }
+            }
+            endpoint = "https://api.gupshup.io/wa/api/v1/template/msg"
+        else:
+            # Session message (format template manually)
+            message = message_template
+            for key, value in variables.items():
+                message = message.replace(f"{{{{{key}}}}}", str(value))
+                message = message.replace(f"{{{{ {key} }}}}", str(value))
+
+            payload = {
+                "channel": "whatsapp",
+                "source": source_number,
+                "destination": phone,
+                "message": {
+                    "type": "text",
+                    "text": message
+                }
+            }
+            endpoint = "https://api.gupshup.io/wa/api/v1/msg"
+
+        response = httpx.post(
+            endpoint,
+            headers={
+                "apikey": api_key,
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=30.0
+        )
+
+        # Update campaign borrower status
+        from app.models.campaign import CampaignBorrower
+        cb = session.execute(
+            select(CampaignBorrower).where(CampaignBorrower.id == campaign_borrower_id)
+        ).scalar_one_or_none()
+
+        if cb:
+            if response.status_code in [200, 201, 202]:
+                result = response.json()
+                cb.status = "completed"
+                cb.outcome = "sent"
+                cb.outcome_details = {"message_id": result.get("messageId")}
+            else:
+                cb.status = "failed"
+                cb.outcome = "failed"
+                cb.outcome_details = {"error": response.text}
+
+            session.commit()
+
+        return {"success": response.status_code in [200, 201, 202]}
+
+    except Exception as e:
+        try:
+            from app.models.campaign import CampaignBorrower
+            cb = session.execute(
+                select(CampaignBorrower).where(CampaignBorrower.id == campaign_borrower_id)
+            ).scalar_one_or_none()
+            if cb:
+                cb.status = "failed"
+                cb.outcome_details = {"error": str(e)}
+                session.commit()
+        except Exception:
+            pass
+        raise
 
     finally:
         session.close()

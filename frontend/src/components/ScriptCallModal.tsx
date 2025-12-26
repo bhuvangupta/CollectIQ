@@ -135,8 +135,8 @@ export default function ScriptCallModal({
         {/* Info Banner */}
         <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
           <p className="text-sm text-amber-700">
-            <strong>Script Call:</strong> AI generates a script for you to follow.
-            You'll make the call manually using this script as a guide.
+            <strong>Click-to-Call:</strong> When you click "Start Call", your phone will ring first.
+            Answer it, and you'll be connected to the customer. Use the script below as your guide.
           </p>
         </div>
 
@@ -267,10 +267,10 @@ export default function ScriptCallModal({
             <CheckCircleIcon className="h-5 w-5 text-green-500" />
             <div>
               <p className="text-sm font-medium text-green-700">
-                Call Initiated
+                Call Initiated - Check Your Phone!
               </p>
               <p className="text-xs text-green-600">
-                Use the script above as your guide. The script is saved in the call record.
+                Your phone should ring shortly. Answer it to connect with {borrowerName}.
               </p>
             </div>
           </div>
