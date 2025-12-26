@@ -2,6 +2,18 @@
 
 An intelligent loan collection platform for Indian financial institutions, featuring AI voice bots, multi-channel communication, and comprehensive analytics.
 
+## Features
+
+- **AI Voice Calling** - Automated collection calls via [Bolna AI](docs/voice-ai-providers.md#bolna-ai-setup), [Sarvam AI](docs/voice-ai-providers.md#sarvam-ai-setup), or [LiveKit](docs/voice-ai-providers.md#livekit-setup)
+- **Real-Time Voice Demo** - Browser-based [voice testing](docs/voice-demo.md) with configurable TTS (Edge/Sarvam)
+- **Multi-Language Support** - Hindi, English, and 9 Indian regional languages
+- **Multi-Channel Communication** - Phone calls, SMS, WhatsApp
+- **Campaign Automation** - Bulk calling with retry scheduling, per-campaign provider selection, and live monitoring
+- **AI Intelligence** - Priority scoring, risk assessment, and collection strategy recommendations
+- **Case Management** - Assign, track, and manage collection cases
+- **Analytics Dashboard** - Real-time metrics and agent performance
+- **Compliance Built-in** - RBI guideline compliance checking
+
 ## Architecture
 
 ![Architecture](docs/screenshots/architecture.png)
@@ -38,18 +50,6 @@ An intelligent loan collection platform for Indian financial institutions, featu
 ![Data Import](docs/screenshots/18_Settings_Data_Import.png)
 
 </details>
-
-## Features
-
-- **AI Voice Calling** - Automated collection calls via [Bolna AI](docs/voice-ai-providers.md#bolna-ai-setup), [Sarvam AI](docs/voice-ai-providers.md#sarvam-ai-setup), or [LiveKit](docs/voice-ai-providers.md#livekit-setup)
-- **Real-Time Voice Demo** - Browser-based [voice testing](docs/voice-demo.md) with configurable TTS (Edge/Sarvam)
-- **Multi-Language Support** - Hindi, English, and 9 Indian regional languages
-- **Multi-Channel Communication** - Phone calls, SMS, WhatsApp
-- **Campaign Automation** - Bulk calling with retry scheduling, per-campaign provider selection, and live monitoring
-- **AI Intelligence** - Priority scoring, risk assessment, and collection strategy recommendations
-- **Case Management** - Assign, track, and manage collection cases
-- **Analytics Dashboard** - Real-time metrics and agent performance
-- **Compliance Built-in** - RBI guideline compliance checking
 
 ## Tech Stack
 
