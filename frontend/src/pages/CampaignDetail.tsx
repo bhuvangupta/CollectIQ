@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
 import {
   ArrowLeftIcon,
   PhoneIcon,
@@ -9,6 +11,9 @@ import {
   UserGroupIcon,
   ChartBarIcon,
   ArrowTrendingUpIcon,
+  BeakerIcon,
+  ChatBubbleLeftRightIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline'
 import {
   BarChart,
@@ -26,6 +31,32 @@ import Card, { CardHeader, CardTitle } from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import { StatusBadge } from '../components/ui/Badge'
 import { AnimatedCounter } from '../components/ui/AnimatedCounter'
+
+interface SimulationBorrower {
+  borrower_name: string
+  phone: string
+  amount: number
+  dpd: number
+  strategy: string
+  message: string
+  ai_script?: {
+    opening: string
+    objection_handling: string[]
+    closing: string
+    tone: string
+    language: string
+    suggested_responses: Record<string, string>
+  }
+}
+
+interface SimulationResult {
+  campaign_id: string
+  campaign_name: string
+  campaign_type: string
+  sample_borrowers: SimulationBorrower[]
+  total_targets: number
+  message_template: string
+}
 
 interface CampaignAnalytics {
   campaign: {
@@ -68,6 +99,24 @@ interface CampaignAnalytics {
 export default function CampaignDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [showSimulation, setShowSimulation] = useState(false)
+  const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
+
+  const simulateMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.post<SimulationResult>(`/campaigns/${id}/simulate`)
+      return response.data
+    },
+    onSuccess: (data) => {
+      setSimulationResult(data)
+      setShowSimulation(true)
+      toast.success('Simulation generated successfully')
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.detail || 'Failed to generate simulation'
+      toast.error(message)
+    },
+  })
 
   const { data: analytics, isLoading } = useQuery({
     queryKey: ['campaignAnalytics', id],
@@ -155,7 +204,148 @@ export default function CampaignDetail() {
             </div>
           </div>
         </div>
+        <Button
+          variant="secondary"
+          onClick={() => simulateMutation.mutate()}
+          loading={simulateMutation.isPending}
+        >
+          <BeakerIcon className="h-5 w-5 mr-2" />
+          Simulate Campaign
+        </Button>
       </div>
+
+      {/* Simulation Results */}
+      {showSimulation && simulationResult && (
+        <Card className="border-2 border-ai-500/30 bg-gradient-to-br from-ai-500/5 to-transparent">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-ai-500/10">
+                <SparklesIcon className="h-5 w-5 text-ai-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-light-900">Campaign Simulation Preview</h3>
+                <p className="text-sm text-light-500">
+                  Showing {simulationResult.sample_borrowers.length} sample messages from {simulationResult.total_targets} total targets
+                </p>
+              </div>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setShowSimulation(false)}>
+              Close
+            </Button>
+          </div>
+
+          {/* Message Template */}
+          <div className="mb-6 p-4 bg-light-100 rounded-lg">
+            <p className="text-xs font-medium text-light-500 uppercase tracking-wide mb-2">Message Template</p>
+            <p className="text-sm text-light-700 font-mono">{simulationResult.message_template}</p>
+          </div>
+
+          {/* Sample Messages */}
+          <div className="space-y-4">
+            {simulationResult.sample_borrowers.map((borrower, index) => (
+              <div key={index} className="border border-light-200 rounded-lg overflow-hidden">
+                {/* Borrower Header */}
+                <div className="bg-light-50 px-4 py-3 flex items-center justify-between border-b border-light-200">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary-500/10 flex items-center justify-center">
+                      <span className="text-sm font-medium text-primary-600">
+                        {borrower.borrower_name.charAt(0)}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-light-900">{borrower.borrower_name}</p>
+                      <p className="text-xs text-light-500">{borrower.phone}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="text-light-600">₹{borrower.amount.toLocaleString()}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      borrower.dpd <= 30 ? 'bg-green-100 text-green-700' :
+                      borrower.dpd <= 60 ? 'bg-yellow-100 text-yellow-700' :
+                      borrower.dpd <= 90 ? 'bg-orange-100 text-orange-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {borrower.dpd} DPD
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-ai-100 text-ai-700 text-xs font-medium">
+                      {borrower.strategy}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Message Preview */}
+                <div className="p-4">
+                  <div className="flex items-start gap-3 mb-4">
+                    <ChatBubbleLeftRightIcon className="h-5 w-5 text-primary-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-light-500 uppercase tracking-wide mb-1">
+                        {campaign.campaign_type === 'voice' ? 'Voice Message Script' : 'SMS/WhatsApp Message'}
+                      </p>
+                      <p className="text-sm text-light-700 bg-primary-50 rounded-lg p-3 border border-primary-100">
+                        {borrower.message}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* AI Call Script (only for voice campaigns) */}
+                  {borrower.ai_script && campaign.campaign_type === 'voice' && (
+                    <div className="mt-4 pt-4 border-t border-light-200">
+                      <div className="flex items-center gap-2 mb-3">
+                        <SparklesIcon className="h-4 w-4 text-ai-500" />
+                        <span className="text-xs font-medium text-ai-600 uppercase tracking-wide">
+                          AI Call Script ({borrower.ai_script.tone} tone - {borrower.ai_script.language === 'hi' ? 'Hinglish' : 'English'})
+                        </span>
+                      </div>
+
+                      <div className="space-y-3 text-sm">
+                        {/* Opening */}
+                        <div className="bg-green-50 rounded-lg p-3 border border-green-100">
+                          <p className="text-xs font-medium text-green-600 mb-1">Opening</p>
+                          <p className="text-green-800">{borrower.ai_script.opening}</p>
+                        </div>
+
+                        {/* Objection Handling */}
+                        <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
+                          <p className="text-xs font-medium text-amber-600 mb-2">Objection Handling</p>
+                          <ul className="space-y-1">
+                            {borrower.ai_script.objection_handling.map((obj, i) => (
+                              <li key={i} className="text-amber-800 text-sm flex items-start gap-2">
+                                <span className="text-amber-500">•</span>
+                                {obj}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        {/* Suggested Responses */}
+                        {Object.keys(borrower.ai_script.suggested_responses).length > 0 && (
+                          <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+                            <p className="text-xs font-medium text-blue-600 mb-2">Suggested Responses</p>
+                            <div className="space-y-2">
+                              {Object.entries(borrower.ai_script.suggested_responses).map(([scenario, response]) => (
+                                <div key={scenario} className="text-sm">
+                                  <span className="font-medium text-blue-700 capitalize">{scenario.replace('_', ' ')}:</span>
+                                  <span className="text-blue-800 ml-2">{response}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Closing */}
+                        <div className="bg-purple-50 rounded-lg p-3 border border-purple-100">
+                          <p className="text-xs font-medium text-purple-600 mb-1">Closing</p>
+                          <p className="text-purple-800">{borrower.ai_script.closing}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">

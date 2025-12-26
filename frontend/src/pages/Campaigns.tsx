@@ -18,6 +18,9 @@ interface CampaignFormData {
   description: string
   campaign_type: string
   ai_enabled: boolean
+  dpd_min?: number
+  dpd_max?: number
+  strategy?: string
 }
 
 export default function Campaigns() {
@@ -28,20 +31,41 @@ export default function Campaigns() {
 
   const createCampaign = useCreateCampaign()
 
-  // Auto-open modal if new=true in URL
-  useEffect(() => {
-    if (searchParams.get('new') === 'true') {
-      setModalOpen(true)
-      setSearchParams({})
-    }
-  }, [searchParams, setSearchParams])
+  // Get strategy params from URL (from AI Intelligence page)
+  const strategyName = searchParams.get('name')
+  const strategyType = searchParams.get('strategy')
+  const dpdMin = searchParams.get('dpd_min')
+  const dpdMax = searchParams.get('dpd_max')
+  const channel = searchParams.get('channel')
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<CampaignFormData>({
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<CampaignFormData>({
     defaultValues: {
       campaign_type: 'voice',
-      ai_enabled: false,
+      ai_enabled: true,
     }
   })
+
+  const watchDpdMin = watch('dpd_min')
+  const watchDpdMax = watch('dpd_max')
+
+  // Auto-open modal if new=true in URL and pre-fill from strategy
+  useEffect(() => {
+    if (searchParams.get('new') === 'true') {
+      // Pre-fill form from URL params
+      if (strategyName) setValue('name', strategyName)
+      if (strategyType) setValue('strategy', strategyType)
+      if (dpdMin) setValue('dpd_min', parseInt(dpdMin))
+      if (dpdMax) setValue('dpd_max', parseInt(dpdMax))
+      if (channel) {
+        setValue('campaign_type', channel)
+      }
+      setValue('ai_enabled', true)
+
+      setModalOpen(true)
+      // Clear URL params after reading
+      setSearchParams({})
+    }
+  }, [searchParams, setSearchParams, strategyName, strategyType, dpdMin, dpdMax, channel, setValue])
 
   const { data, isLoading } = useQuery({
     queryKey: ['campaigns', page, statusFilter],
@@ -150,7 +174,21 @@ export default function Campaigns() {
   ]
 
   const onSubmit = (data: CampaignFormData) => {
-    createCampaign.mutate(data, {
+    // Build target_criteria from DPD range
+    const campaignData = {
+      name: data.name,
+      description: data.description,
+      campaign_type: data.campaign_type,
+      ai_enabled: data.ai_enabled,
+      target_criteria: {
+        dpd_min: data.dpd_min || undefined,
+        dpd_max: data.dpd_max || undefined,
+      },
+      // Store strategy in tags for reference
+      tags: data.strategy ? [data.strategy] : [],
+    }
+
+    createCampaign.mutate(campaignData, {
       onSuccess: () => {
         setModalOpen(false)
         reset()
@@ -254,6 +292,40 @@ export default function Campaigns() {
             </select>
           </div>
 
+          {/* DPD Range Filter */}
+          <div className="bg-light-50 rounded-lg p-4 border border-light-200">
+            <label className="block text-sm font-medium text-light-700 mb-3">
+              Target Cases by DPD Range (Days Past Due)
+            </label>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-light-500 mb-1">Min DPD</label>
+                <input
+                  type="number"
+                  {...register('dpd_min', { valueAsNumber: true })}
+                  placeholder="0"
+                  min="0"
+                  className="block w-full rounded-lg bg-white border border-light-300 px-3 py-2 shadow-sm text-light-900 sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-light-500 mb-1">Max DPD</label>
+                <input
+                  type="number"
+                  {...register('dpd_max', { valueAsNumber: true })}
+                  placeholder="180"
+                  min="0"
+                  className="block w-full rounded-lg bg-white border border-light-300 px-3 py-2 shadow-sm text-light-900 sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                />
+              </div>
+            </div>
+            {(watchDpdMin !== undefined || watchDpdMax !== undefined) && (
+              <p className="text-xs text-light-500 mt-2">
+                Will target cases with DPD between {watchDpdMin || 0} and {watchDpdMax || '∞'} days
+              </p>
+            )}
+          </div>
+
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -265,6 +337,9 @@ export default function Campaigns() {
               Enable AI-powered calls
             </label>
           </div>
+
+          {/* Hidden strategy field */}
+          <input type="hidden" {...register('strategy')} />
 
           <div className="flex justify-end gap-3 pt-4 border-t border-light-200">
             <Button

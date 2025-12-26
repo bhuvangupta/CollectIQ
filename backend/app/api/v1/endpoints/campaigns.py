@@ -396,6 +396,189 @@ async def preview_campaign_targets(
     )
 
 
+@router.post("/{campaign_id}/simulate")
+async def simulate_campaign_messages(
+    campaign_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Simulate campaign messages for sample borrowers.
+    Returns sample messages/scripts that would be sent.
+    """
+    from app.models.message_template import MessageTemplate
+    from app.services.collection_intelligence import get_collection_strategy
+
+    result = await db.execute(
+        select(Campaign).where(
+            Campaign.id == campaign_id,
+            Campaign.organization_id == current_user.organization_id
+        )
+    )
+    campaign = result.scalar_one_or_none()
+
+    if not campaign:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found"
+        )
+
+    # Get campaign's target criteria
+    target_criteria = campaign.target_criteria or {}
+
+    # Build query for matching loans
+    query = select(Loan).where(
+        Loan.organization_id == current_user.organization_id,
+        Loan.status == "active"
+    )
+
+    if target_criteria.get("dpd_min") is not None:
+        query = query.where(Loan.dpd >= target_criteria["dpd_min"])
+    if target_criteria.get("dpd_max") is not None:
+        query = query.where(Loan.dpd <= target_criteria["dpd_max"])
+    if target_criteria.get("buckets"):
+        query = query.where(Loan.bucket.in_(target_criteria["buckets"]))
+
+    # Get 3 sample loans
+    result = await db.execute(query.limit(3))
+    sample_loans = result.scalars().all()
+
+    # Get message template for this channel
+    template_result = await db.execute(
+        select(MessageTemplate).where(
+            MessageTemplate.organization_id == current_user.organization_id,
+            MessageTemplate.channel == campaign.campaign_type,
+            MessageTemplate.is_default == True,
+            MessageTemplate.is_active == True
+        ).limit(1)
+    )
+    template = template_result.scalar_one_or_none()
+
+    # Generate sample messages
+    simulations = []
+    for loan in sample_loans:
+        borrower_result = await db.execute(
+            select(Borrower).where(Borrower.id == loan.borrower_id)
+        )
+        borrower = borrower_result.scalar_one()
+
+        # Get recommended strategy for this borrower
+        strategy = get_collection_strategy(loan.dpd or 0)
+
+        # Fill template placeholders
+        template_content = template.content if template else "Hi {name}, your payment of Rs.{amount} is overdue."
+        message = template_content.format(
+            name=borrower.first_name or borrower.full_name.split()[0],
+            full_name=borrower.full_name,
+            emi=str(int(loan.emi_amount or 0)),
+            amount=str(int(loan.overdue_amount or 0)),
+            dpd=str(loan.dpd or 0),
+            outstanding=str(int(loan.total_outstanding or 0)),
+            loan_type=loan.loan_type or "loan",
+        )
+
+        # Generate AI call script opening (if voice campaign)
+        call_script = None
+        if campaign.campaign_type == "voice" and campaign.ai_enabled:
+            call_script = generate_ai_call_script(
+                borrower_name=borrower.first_name or borrower.full_name.split()[0],
+                amount=int(loan.overdue_amount or 0),
+                dpd=loan.dpd or 0,
+                strategy=strategy,
+                language=campaign.ai_language or "hi"
+            )
+
+        simulations.append({
+            "borrower": {
+                "name": borrower.full_name,
+                "phone": mask_phone(borrower.primary_phone),
+            },
+            "loan": {
+                "account": loan.loan_account_number,
+                "dpd": loan.dpd,
+                "overdue_amount": float(loan.overdue_amount or 0),
+                "outstanding": float(loan.total_outstanding or 0),
+            },
+            "strategy": strategy,
+            "message": message,
+            "call_script": call_script,
+        })
+
+    return {
+        "campaign": {
+            "id": str(campaign.id),
+            "name": campaign.name,
+            "type": campaign.campaign_type,
+            "ai_enabled": campaign.ai_enabled,
+        },
+        "template_used": template.name if template else "Default",
+        "sample_count": len(simulations),
+        "simulations": simulations,
+    }
+
+
+def mask_phone(phone: str) -> str:
+    """Mask phone number for privacy."""
+    if not phone or len(phone) < 6:
+        return phone
+    return phone[:3] + "****" + phone[-3:]
+
+
+def generate_ai_call_script(
+    borrower_name: str,
+    amount: int,
+    dpd: int,
+    strategy: dict,
+    language: str = "hi"
+) -> dict:
+    """Generate sample AI call script based on strategy."""
+    tone = strategy.get("tone", "professional")
+
+    if language in ["hi", "hinglish"]:
+        if tone == "polite":
+            opening = f"Namaste {borrower_name} ji, main CollectIQ se bol raha hoon. Aapki EMI Rs.{amount} due hai. Kya aap payment kar sakte hain?"
+            objection_response = "Main samajh sakta hoon. Kya aap mujhe bata sakte hain ki aap kab payment kar payenge?"
+            closing = "Dhanyavaad {borrower_name} ji. Kya aur koi madad chahiye?"
+        elif tone == "professional":
+            opening = f"Namaste {borrower_name} ji, CollectIQ se call hai. Aapka Rs.{amount} ka payment {dpd} din se pending hai. Iska kya status hai?"
+            objection_response = "Theek hai. Aap exactly kab tak payment kar sakte hain? Hum aapko remind karenge."
+            closing = "Thank you. Hum aapki payment ka wait karenge."
+        elif tone == "firm":
+            opening = f"{borrower_name} ji, CollectIQ se urgent call hai. Rs.{amount} {dpd} din se overdue hai. Aaj hi payment karna zaroori hai."
+            objection_response = "Yeh matter serious hai. Agar payment nahi hoti toh aage action lena padega. Kya aap aaj hi kuch arrangement kar sakte hain?"
+            closing = "Please jaldi se jaldi payment karein. Thank you."
+        else:  # urgent
+            opening = f"{borrower_name} ji, aapka account serious overdue hai. Rs.{amount} turant pay karna zaroori hai otherwise legal action hoga."
+            objection_response = "Yeh final notice hai. Aaj hi payment arrangement karein ya fir hume aage badhna padega."
+            closing = "Turant action lein. Thank you."
+    else:  # English
+        if tone == "polite":
+            opening = f"Hello {borrower_name}, this is CollectIQ calling. Your EMI of Rs.{amount} is due. Would you be able to make the payment today?"
+            objection_response = "I understand. Could you let me know when you'll be able to make the payment?"
+            closing = f"Thank you {borrower_name}. Is there anything else I can help with?"
+        elif tone == "professional":
+            opening = f"Hello {borrower_name}, calling from CollectIQ. Your payment of Rs.{amount} is {dpd} days overdue. What's the status on this?"
+            objection_response = "I see. When exactly can you make the payment? We can set a reminder for you."
+            closing = "Thank you. We'll follow up accordingly."
+        elif tone == "firm":
+            opening = f"{borrower_name}, this is an urgent call from CollectIQ. Rs.{amount} is {dpd} days overdue. This needs to be resolved today."
+            objection_response = "This is a serious matter. If payment isn't made, we'll need to take further action. Can you arrange something today?"
+            closing = "Please make the payment as soon as possible. Thank you."
+        else:  # urgent
+            opening = f"{borrower_name}, your account is in serious default. Rs.{amount} must be paid immediately to avoid legal proceedings."
+            objection_response = "This is a final notice. Please arrange payment today or we will have to proceed with further action."
+            closing = "Take immediate action. Thank you."
+
+    return {
+        "opening": opening,
+        "objection_handling": objection_response,
+        "closing": closing,
+        "tone": tone,
+        "language": language,
+        "suggested_responses": strategy.get("suggested_actions", []),
+    }
+
+
 @router.post("/{campaign_id}/borrowers")
 async def add_borrowers_to_campaign(
     campaign_id: UUID,

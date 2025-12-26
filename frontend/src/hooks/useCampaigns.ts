@@ -2,6 +2,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import api from '../services/api'
 
+interface TargetCriteria {
+  dpd_min?: number
+  dpd_max?: number
+  buckets?: string[]
+  loan_types?: string[]
+}
+
 interface CampaignCreate {
   name: string
   description?: string
@@ -16,6 +23,8 @@ interface CampaignCreate {
   max_attempts_per_borrower?: number
   concurrent_calls?: number
   priority?: number
+  target_criteria?: TargetCriteria
+  strategy?: string
 }
 
 export function useCreateCampaign() {
