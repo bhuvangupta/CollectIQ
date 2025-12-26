@@ -12,6 +12,13 @@ class FileService:
     """Service for file storage using MinIO."""
 
     def __init__(self):
+        # Validate MinIO credentials are configured
+        if not settings.minio_root_user or not settings.minio_root_password:
+            raise ValueError(
+                "MinIO credentials not configured. "
+                "Set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD environment variables."
+            )
+
         self.client = Minio(
             f"{settings.minio_host}:{settings.minio_port}",
             access_key=settings.minio_root_user,
@@ -114,5 +121,13 @@ class FileService:
             return False
 
 
-# Singleton instance
-file_service = FileService()
+# Lazy singleton instance
+_file_service: Optional[FileService] = None
+
+
+def get_file_service() -> FileService:
+    """Get the file service singleton (lazy initialization)."""
+    global _file_service
+    if _file_service is None:
+        _file_service = FileService()
+    return _file_service

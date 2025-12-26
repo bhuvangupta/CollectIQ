@@ -82,12 +82,8 @@ echo $! >> "$PID_FILE"
 source "$PROJECT_ROOT/venv/bin/activate"
 echo -e "${GREEN}AI Engine started on http://localhost:8001${NC}"
 
-# Start Telephony Service
-echo -e "\n${YELLOW}Starting Telephony Service...${NC}"
-cd "$PROJECT_ROOT/telephony"
-uvicorn main:app --host 0.0.0.0 --port 8002 --reload > "$PROJECT_ROOT/logs/telephony.log" 2>&1 &
-echo $! >> "$PID_FILE"
-echo -e "${GREEN}Telephony started on http://localhost:8002${NC}"
+# NOTE: Telephony is now integrated into the Backend API
+# Calls/SMS/WhatsApp endpoints available at /api/v1/telephony/*
 
 # Start Celery Worker
 echo -e "\n${YELLOW}Starting Celery Worker...${NC}"
@@ -119,12 +115,11 @@ echo "  Frontend:     http://localhost:3000"
 echo "  Backend API:  http://localhost:8000"
 echo "  API Docs:     http://localhost:8000/docs"
 echo "  AI Engine:    http://localhost:8001"
-echo "  Telephony:    http://localhost:8002"
+echo "  Telephony:    http://localhost:8000/api/v1/telephony (integrated)"
 echo ""
 echo -e "${BLUE}Logs:${NC}"
 echo "  Backend:      $PROJECT_ROOT/logs/backend.log"
 echo "  AI Engine:    $PROJECT_ROOT/logs/ai_engine.log"
-echo "  Telephony:    $PROJECT_ROOT/logs/telephony.log"
 echo "  Celery:       $PROJECT_ROOT/logs/celery_worker.log"
 echo "  Frontend:     $PROJECT_ROOT/logs/frontend.log"
 echo ""

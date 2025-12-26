@@ -1,6 +1,17 @@
 # Exotel Integration
 
-CollectIQ supports direct Exotel telephony integration for production phone calls in India.
+CollectIQ integrates Exotel telephony directly into the backend for production phone calls in India.
+
+## Architecture
+
+```
+Exotel API ──────► Backend (8000) ──────► Database
+                       │
+                       ▼
+              /api/v1/telephony/webhook/exotel/status
+```
+
+Webhooks from Exotel go directly to the backend - no middleman service needed.
 
 ## Overview
 
@@ -36,17 +47,19 @@ EXOTEL_API_TOKEN=your-api-token
 EXOTEL_SID=your-account-sid
 EXOTEL_SUBDOMAIN=api          # or your custom subdomain
 EXOTEL_CALLER_ID=+91XXXXXXXXXX
-EXOTEL_WEBHOOK_URL=https://your-domain.com/webhooks/exotel
+EXOTEL_WEBHOOK_URL=https://your-domain.com/api/v1/telephony/webhook/exotel/status
 ```
 
 ### 3. Configure Webhooks
 
-Set up webhook URLs in your Exotel dashboard to receive call status updates:
+Set up webhook URLs in your Exotel dashboard to receive call status updates.
+
+Webhooks go directly to the backend API:
 
 | Event | Webhook URL |
 |-------|-------------|
-| Status Callback | `https://your-domain.com/webhooks/exotel/status` |
-| Passthru (future) | `https://your-domain.com/webhooks/exotel/passthru` |
+| Status Callback | `https://your-domain.com/api/v1/telephony/webhook/exotel/status` |
+| Passthru | `https://your-domain.com/api/v1/telephony/webhook/exotel/passthru` |
 
 ## Usage
 
@@ -112,14 +125,14 @@ Response:
 Called automatically by campaign tasks, but can be triggered manually:
 
 ```python
-from telephony.services.factory import get_telephony_provider
+from app.services.telephony import get_telephony_provider
 
 provider = get_telephony_provider()  # Returns ExotelProvider if configured
 result = await provider.initiate_call(
     from_number="+91XXXXXXXXXX",
     to_number="+91YYYYYYYYYY",
     caller_id="+91XXXXXXXXXX",
-    callback_url="https://your-domain.com/webhooks/exotel/status",
+    callback_url="https://your-domain.com/api/v1/telephony/webhook/exotel/status",
     custom_field="campaign_id:borrower_id"
 )
 ```

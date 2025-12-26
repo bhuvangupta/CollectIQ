@@ -1,9 +1,14 @@
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.core.database import get_db
+
+# Rate limiter for auth endpoints
+limiter = Limiter(key_func=get_remote_address)
 from app.core.security import (
     verify_password,
     get_password_hash,
@@ -23,28 +28,57 @@ from app.schemas.auth import (
     RegisterRequest,
     CurrentUserResponse,
 )
+from app.services.audit_service import log_audit_event, get_client_ip
 
 router = APIRouter()
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit("5/minute")
 async def login(
-    request: LoginRequest,
+    request: Request,
+    login_data: LoginRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """Authenticate user and return tokens."""
     result = await db.execute(
-        select(User).where(User.email == request.email)
+        select(User).where(User.email == login_data.email)
     )
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(request.password, user.hashed_password):
+    if not user or not verify_password(login_data.password, user.hashed_password):
+        # Log failed login attempt
+        if user:
+            await log_audit_event(
+                db=db,
+                action="login_failed",
+                category="security",
+                organization_id=user.organization_id,
+                user_id=user.id,
+                user_email=user.email,
+                description="Failed login attempt - invalid password",
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("User-Agent", "")[:500],
+            )
+            await db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
         )
 
     if not user.is_active:
+        await log_audit_event(
+            db=db,
+            action="login_failed",
+            category="security",
+            organization_id=user.organization_id,
+            user_id=user.id,
+            user_email=user.email,
+            description="Failed login attempt - account disabled",
+            ip_address=get_client_ip(request),
+            user_agent=request.headers.get("User-Agent", "")[:500],
+        )
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is disabled"
@@ -61,6 +95,21 @@ async def login(
         role=user.role
     )
 
+    # Log successful login
+    await log_audit_event(
+        db=db,
+        action="login_success",
+        category="security",
+        organization_id=user.organization_id,
+        user_id=user.id,
+        user_email=user.email,
+        user_name=user.full_name,
+        description="User logged in successfully",
+        ip_address=get_client_ip(request),
+        user_agent=request.headers.get("User-Agent", "")[:500],
+    )
+    await db.commit()
+
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -69,12 +118,14 @@ async def login(
 
 
 @router.post("/refresh", response_model=TokenResponse)
+@limiter.limit("10/minute")
 async def refresh_token(
-    request: RefreshTokenRequest,
+    request: Request,
+    refresh_data: RefreshTokenRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """Refresh access token using refresh token."""
-    payload = verify_token(request.refresh_token, token_type="refresh")
+    payload = verify_token(refresh_data.refresh_token, token_type="refresh")
 
     if payload is None:
         raise HTTPException(
@@ -137,33 +188,62 @@ async def get_current_user_info(
 
 
 @router.post("/change-password")
+@limiter.limit("3/minute")
 async def change_password(
-    request: ChangePasswordRequest,
+    request: Request,
+    password_data: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Change current user's password."""
-    if not verify_password(request.current_password, current_user.hashed_password):
+    if not verify_password(password_data.current_password, current_user.hashed_password):
+        await log_audit_event(
+            db=db,
+            action="password_change_failed",
+            category="security",
+            organization_id=current_user.organization_id,
+            user_id=current_user.id,
+            user_email=current_user.email,
+            description="Password change failed - incorrect current password",
+            ip_address=get_client_ip(request),
+            user_agent=request.headers.get("User-Agent", "")[:500],
+        )
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect"
         )
 
-    current_user.hashed_password = get_password_hash(request.new_password)
+    current_user.hashed_password = get_password_hash(password_data.new_password)
+
+    await log_audit_event(
+        db=db,
+        action="password_changed",
+        category="security",
+        organization_id=current_user.organization_id,
+        user_id=current_user.id,
+        user_email=current_user.email,
+        user_name=current_user.full_name,
+        description="User changed their password",
+        ip_address=get_client_ip(request),
+        user_agent=request.headers.get("User-Agent", "")[:500],
+    )
     await db.commit()
 
     return {"message": "Password changed successfully"}
 
 
 @router.post("/register", response_model=TokenResponse)
+@limiter.limit("3/minute")
 async def register(
-    request: RegisterRequest,
+    request: Request,
+    register_data: RegisterRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """Register a new organization and admin user."""
     # Check if email already exists
     result = await db.execute(
-        select(User).where(User.email == request.email)
+        select(User).where(User.email == register_data.email)
     )
     if result.scalar_one_or_none():
         raise HTTPException(
@@ -172,7 +252,7 @@ async def register(
         )
 
     # Create organization
-    org_slug = request.organization_name.lower().replace(" ", "-")
+    org_slug = register_data.organization_name.lower().replace(" ", "-")
     result = await db.execute(
         select(Organization).where(Organization.slug == org_slug)
     )
@@ -180,25 +260,43 @@ async def register(
         org_slug = f"{org_slug}-{int(datetime.now().timestamp())}"
 
     org = Organization(
-        name=request.organization_name,
+        name=register_data.organization_name,
         slug=org_slug,
-        org_type=request.organization_type
+        org_type=register_data.organization_type
     )
     db.add(org)
     await db.flush()
 
     # Create admin user
     user = User(
-        email=request.email,
-        hashed_password=get_password_hash(request.password),
-        first_name=request.first_name,
-        last_name=request.last_name,
+        email=register_data.email,
+        hashed_password=get_password_hash(register_data.password),
+        first_name=register_data.first_name,
+        last_name=register_data.last_name,
         role="admin",
         organization_id=org.id,
         is_active=True,
         is_verified=True
     )
     db.add(user)
+    await db.flush()
+
+    # Log registration
+    await log_audit_event(
+        db=db,
+        action="user_registered",
+        category="security",
+        organization_id=org.id,
+        user_id=user.id,
+        user_email=user.email,
+        user_name=f"{user.first_name} {user.last_name}",
+        entity_type="organization",
+        entity_id=org.id,
+        entity_name=org.name,
+        description=f"New organization '{org.name}' and admin user registered",
+        ip_address=get_client_ip(request),
+        user_agent=request.headers.get("User-Agent", "")[:500],
+    )
     await db.commit()
 
     # Generate tokens

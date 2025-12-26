@@ -1,12 +1,11 @@
-"""WebSocket connection manager for real-time updates."""
+"""WebSocket connection manager for real-time telephony updates."""
 
 from typing import Dict, List, Any, Optional
 from fastapi import WebSocket
-import json
 
 
-class ConnectionManager:
-    """Manage WebSocket connections for real-time updates."""
+class TelephonyWebSocketManager:
+    """Manage WebSocket connections for real-time telephony updates."""
 
     def __init__(self):
         # General connections (for dashboard, etc.)
@@ -120,3 +119,15 @@ class ConnectionManager:
                 for user_id, conns in self.user_connections.items()
             }
         }
+
+
+# Singleton instance
+_ws_manager = None
+
+
+def get_ws_manager() -> TelephonyWebSocketManager:
+    """Get the singleton WebSocket manager instance."""
+    global _ws_manager
+    if _ws_manager is None:
+        _ws_manager = TelephonyWebSocketManager()
+    return _ws_manager

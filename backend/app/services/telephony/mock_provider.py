@@ -2,9 +2,10 @@
 
 import asyncio
 import uuid
+import struct
+import random
 from datetime import datetime
 from typing import Dict, Any, Optional
-import random
 
 
 class MockTelephonyProvider:
@@ -23,15 +24,19 @@ class MockTelephonyProvider:
         self,
         from_number: str,
         to_number: str,
+        caller_id: Optional[str] = None,
         callback_url: Optional[str] = None,
-        custom_field: Optional[str] = None
+        custom_field: Optional[str] = None,
+        time_limit: int = 300,
+        record: bool = True,
     ) -> Dict[str, Any]:
         """Initiate an outbound call."""
         await self._simulate_delay()
 
-        call_id = f"call_{uuid.uuid4().hex[:12]}"
+        call_id = f"mock_{uuid.uuid4().hex[:12]}"
 
         call_data = {
+            "success": True,
             "call_id": call_id,
             "sid": call_id,
             "from": from_number,
@@ -58,8 +63,6 @@ class MockTelephonyProvider:
         if call_id not in self.calls:
             return
 
-        call = self.calls[call_id]
-
         # Queued -> Ringing
         await asyncio.sleep(random.uniform(0.5, 1.5))
         if call_id in self.calls:
@@ -81,7 +84,7 @@ class MockTelephonyProvider:
                     self.calls[call_id]["duration"] = duration
                     self.calls[call_id]["ended_at"] = datetime.utcnow().isoformat()
                     self.calls[call_id]["recording_url"] = f"/mock/recordings/{call_id}.wav"
-                    self.calls[call_id]["price"] = round(duration * 0.02, 2)  # Mock pricing
+                    self.calls[call_id]["price"] = round(duration * 0.02, 2)
             else:
                 self.calls[call_id]["status"] = "no-answer"
                 self.calls[call_id]["ended_at"] = datetime.utcnow().isoformat()
@@ -134,7 +137,7 @@ class MockTelephonyProvider:
             "status": "sent",
             "created_at": datetime.utcnow().isoformat(),
             "delivered_at": None,
-            "price": 0.25  # Mock price per SMS
+            "price": 0.25
         }
 
         self.sms_messages[message_id] = sms_data
@@ -182,7 +185,7 @@ class MockTelephonyProvider:
             "created_at": datetime.utcnow().isoformat(),
             "delivered_at": None,
             "read_at": None,
-            "price": 0.50  # Mock price per WhatsApp message
+            "price": 0.50
         }
 
         self.whatsapp_messages[message_id] = wa_data
@@ -230,13 +233,10 @@ class MockTelephonyProvider:
         if not call.get("recording_url"):
             return None
 
-        # Return mock WAV file
         return self._generate_mock_audio()
 
     def _generate_mock_audio(self) -> bytes:
         """Generate mock WAV audio data."""
-        import struct
-
         sample_rate = 8000
         duration = 1
         num_samples = sample_rate * duration
@@ -264,6 +264,16 @@ class MockTelephonyProvider:
         """Simulate network delay."""
         delay = random.uniform(self.min_delay, self.max_delay)
         await asyncio.sleep(delay)
+
+    def parse_webhook(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse webhook payload (for interface compatibility)."""
+        return {
+            "call_id": payload.get("call_id"),
+            "status": payload.get("status"),
+            "duration": payload.get("duration", 0),
+            "recording_url": payload.get("recording_url"),
+            "custom_field": payload.get("custom_field"),
+        }
 
     def get_statistics(self) -> Dict[str, Any]:
         """Get mock provider statistics."""

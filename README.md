@@ -2,6 +2,27 @@
 
 An intelligent loan collection platform for Indian financial institutions, featuring AI voice bots, multi-channel communication, and comprehensive analytics.
 
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                        VM                               │
+│                                                         │
+│  ┌──────────┐  ┌─────────────────────┐  ┌───────────┐  │
+│  │ Frontend │  │      Backend        │  │ AI Engine │  │
+│  │  (3000)  │  │ + Telephony (8000)  │  │  (8001)   │  │
+│  └──────────┘  └─────────────────────┘  └───────────┘  │
+│                          │                      │       │
+│                   ┌──────▼──────┐              │       │
+│                   │  Postgres   │              │       │
+│                   │  + Redis    │              │       │
+│                   └─────────────┘              │       │
+└─────────────────────────────────────────────────────────┘
+                           │                      │
+                           ▼                      ▼
+                    Exotel/Gupshup        Groq/Sarvam/Ollama
+```
+
 ## Features
 
 - **AI Voice Calling** - Automated collection calls via [Bolna AI](docs/voice-ai-providers.md#bolna-ai-setup), [ElevenLabs](docs/voice-ai-providers.md#elevenlabs-setup), or direct [Exotel](docs/exotel.md)
@@ -17,11 +38,11 @@ An intelligent loan collection platform for Indian financial institutions, featu
 
 | Component | Technology |
 |-----------|------------|
-| Backend | Python 3.11+, FastAPI, PostgreSQL, Redis, Celery |
+| Backend + Telephony | Python 3.11+, FastAPI, PostgreSQL, Redis, Celery |
 | Frontend | React 18, TypeScript, Tailwind CSS, Zustand |
-| AI/ML | Whisper/Groq/Sarvam STT, Edge/Sarvam TTS, Ollama/Groq/Sarvam LLM |
+| AI Engine | Whisper/Groq/Sarvam STT, Edge/Sarvam TTS, Ollama/Groq/Sarvam LLM |
 | Voice AI | Bolna AI, ElevenLabs |
-| Telephony | Exotel (production), Mock (development) |
+| Telephony | Exotel (production), Gupshup (SMS/WhatsApp), Mock (development) |
 
 ## Quick Start
 
@@ -56,7 +77,7 @@ cd collectiq
 | Service | URL |
 |---------|-----|
 | Frontend | http://localhost:3000 |
-| Backend API | http://localhost:8000/docs |
+| Backend API (includes Telephony) | http://localhost:8000/docs |
 | AI Engine | http://localhost:8001/docs |
 
 ### Default Login
@@ -68,6 +89,7 @@ cd collectiq
 
 | Document | Description |
 |----------|-------------|
+| [User Guide](docs/user-guide.md) | Quick start for end users |
 | [Voice AI Providers](docs/voice-ai-providers.md) | Setup Bolna AI or ElevenLabs for automated calls |
 | [Exotel Integration](docs/exotel.md) | Direct Exotel telephony for production calls |
 | [Sarvam AI](docs/sarvam-ai.md) | Indian language AI (STT, TTS, LLM) |

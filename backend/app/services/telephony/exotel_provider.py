@@ -297,6 +297,21 @@ class ExotelProvider:
             print(f"[Exotel] Error getting SMS status: {e}")
             return None
 
+    async def send_whatsapp(
+        self,
+        phone_number: str,
+        message: str,
+        template_name: Optional[str] = None,
+        template_params: Optional[Dict[str, str]] = None
+    ) -> str:
+        """Send WhatsApp message (placeholder - Exotel doesn't natively support WhatsApp).
+
+        For WhatsApp, consider using Gupshup or similar provider.
+        """
+        raise NotImplementedError(
+            "WhatsApp not supported by Exotel. Use Gupshup or similar provider."
+        )
+
     async def get_call_recording(self, call_id: str) -> Optional[bytes]:
         """Download call recording.
 
@@ -375,7 +390,7 @@ class ExotelProvider:
         """
         return {
             "call_id": payload.get("CallSid"),
-            "status": self._normalize_status(payload.get("Status")),
+            "status": self._normalize_status(payload.get("Status", "")),
             "direction": payload.get("Direction"),
             "from": payload.get("From"),
             "to": payload.get("To"),

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
+import DOMPurify from 'dompurify'
 import {
   PhoneIcon,
   ChatBubbleLeftIcon,
@@ -258,9 +259,12 @@ export default function Communications() {
                         <p
                           className="text-sm text-light-600 line-clamp-2"
                           dangerouslySetInnerHTML={{
-                            __html: result.transcript_snippet.replace(
-                              new RegExp(`(${searchQuery})`, 'gi'),
-                              '<mark class="bg-yellow-200 px-0.5 rounded">$1</mark>'
+                            __html: DOMPurify.sanitize(
+                              result.transcript_snippet.replace(
+                                new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
+                                '<mark class="bg-yellow-200 px-0.5 rounded">$1</mark>'
+                              ),
+                              { ALLOWED_TAGS: ['mark'], ALLOWED_ATTR: ['class'] }
                             ),
                           }}
                         />

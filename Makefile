@@ -35,9 +35,8 @@ up:
 	docker-compose up -d
 	@echo "Services starting..."
 	@echo "Frontend: http://localhost:3000"
-	@echo "Backend API: http://localhost:8000/docs"
+	@echo "Backend API: http://localhost:8000/docs (includes Telephony)"
 	@echo "AI Engine: http://localhost:8001/docs"
-	@echo "Telephony: http://localhost:8002/docs"
 
 # Stop all services
 down:
@@ -55,9 +54,6 @@ logs-frontend:
 
 logs-ai:
 	docker-compose logs -f ai-engine
-
-logs-telephony:
-	docker-compose logs -f telephony
 
 # Shell access
 shell:
@@ -120,9 +116,6 @@ dev-frontend:
 dev-ai:
 	cd ai_engine && uvicorn main:app --reload --host 0.0.0.0 --port 8001
 
-dev-telephony:
-	cd telephony && uvicorn main:app --reload --host 0.0.0.0 --port 8002
-
 # Production mode
 prod:
 	docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
@@ -154,9 +147,8 @@ clean-all:
 # Health check
 health:
 	@echo "Checking services..."
-	@curl -s http://localhost:8000/health | jq . || echo "Backend: DOWN"
+	@curl -s http://localhost:8000/health | jq . || echo "Backend (+ Telephony): DOWN"
 	@curl -s http://localhost:8001/health | jq . || echo "AI Engine: DOWN"
-	@curl -s http://localhost:8002/health | jq . || echo "Telephony: DOWN"
 	@curl -s http://localhost:3000 > /dev/null && echo "Frontend: UP" || echo "Frontend: DOWN"
 
 # Backup

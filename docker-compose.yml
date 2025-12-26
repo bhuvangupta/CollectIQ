@@ -180,24 +180,8 @@ services:
               count: all
               capabilities: [gpu]
 
-  # Telephony Service (Mock/Exotel)
-  telephony:
-    build:
-      context: ./telephony
-      dockerfile: Dockerfile
-    container_name: lcp_telephony
-    environment:
-      - REDIS_HOST=redis
-      - EXOTEL_API_KEY=${EXOTEL_API_KEY:-mock}
-      - EXOTEL_API_TOKEN=${EXOTEL_API_TOKEN:-mock}
-    volumes:
-      - ./telephony:/app
-    ports:
-      - "8002:8002"
-    networks:
-      - lcp_network
-    depends_on:
-      - redis
+  # NOTE: Telephony is now integrated into Backend
+  # Call endpoints at /api/v1/telephony/*
 
   # Frontend (React + Vite)
   frontend:

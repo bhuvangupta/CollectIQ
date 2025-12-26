@@ -50,11 +50,11 @@ class Settings(BaseSettings):
             return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/0"
         return f"redis://{self.redis_host}:{self.redis_port}/0"
 
-    # MinIO
+    # MinIO - credentials required via environment variables
     minio_host: str = "localhost"
     minio_port: int = 9000
-    minio_root_user: str = "minio_admin"
-    minio_root_password: str = "minio_password"
+    minio_root_user: Optional[str] = None  # Required: set MINIO_ROOT_USER
+    minio_root_password: Optional[str] = None  # Required: set MINIO_ROOT_PASSWORD
     minio_bucket: str = "loan-collection"
     minio_secure: bool = False
 
@@ -118,21 +118,25 @@ class Settings(BaseSettings):
     # Frontend
     vite_api_url: str = "http://localhost:8000"
 
+    # CORS
+    cors_origins: str = "http://localhost:3000,http://localhost:80"
+
     @property
     def ai_engine_url(self) -> str:
         return f"http://{self.ai_engine_host}:{self.ai_engine_port}"
 
-    # Telephony
-    telephony_host: str = "localhost"
-    telephony_port: int = 8002
+    # Telephony (integrated into backend)
+    telephony_provider: str = "mock"  # "mock" or "exotel"
     exotel_api_key: Optional[str] = None
     exotel_api_token: Optional[str] = None
     exotel_sid: Optional[str] = None
     exotel_subdomain: Optional[str] = None
+    exotel_caller_id: Optional[str] = None
+    exotel_sms_sender_id: str = "LNCOLL"
+    exotel_webhook_url: Optional[str] = None
 
-    @property
-    def telephony_url(self) -> str:
-        return f"http://{self.telephony_host}:{self.telephony_port}"
+    # SMS/WhatsApp Provider
+    sms_provider: str = "mock"  # "mock", "gupshup", "exotel"
 
     # Voice AI Provider
     voice_ai_provider: str = "livekit"  # "bolna", "livekit", "sarvam"

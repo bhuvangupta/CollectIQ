@@ -26,9 +26,9 @@ if [ -f "$PID_FILE" ]; then
     rm -f "$PID_FILE"
 fi
 
-# Kill by port
+# Kill by port (Backend:8000, AI:8001, Frontend:3000)
 echo -e "\n${YELLOW}Checking for processes on ports...${NC}"
-for port in 8000 8001 8002 3000; do
+for port in 8000 8001 3000; do
     pid=$(lsof -ti:$port 2>/dev/null || true)
     if [ -n "$pid" ]; then
         kill $pid 2>/dev/null || true

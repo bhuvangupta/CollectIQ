@@ -1,9 +1,20 @@
 # Development Guide
 
+## Architecture
+
+CollectIQ runs as 2 main services:
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Backend + Telephony | 8000 | FastAPI backend with integrated telephony |
+| AI Engine | 8001 | STT/TTS/LLM services |
+
+Supporting services: PostgreSQL, Redis, Celery (worker + beat).
+
 ## Running Individual Services
 
 ```bash
-# Backend only
+# Backend only (includes telephony)
 ./scripts/start_backend.sh
 
 # Frontend only
@@ -11,9 +22,6 @@
 
 # AI Engine only
 ./scripts/start_ai.sh
-
-# Telephony only
-./scripts/start_telephony.sh
 
 # Celery worker
 ./scripts/start_celery.sh worker
@@ -74,10 +82,9 @@
 ./scripts/logs.sh all
 
 # Specific service
-./scripts/logs.sh backend
+./scripts/logs.sh backend    # Includes telephony logs
 ./scripts/logs.sh frontend
 ./scripts/logs.sh ai
-./scripts/logs.sh telephony
 ./scripts/logs.sh celery
 ```
 
@@ -85,13 +92,18 @@
 
 ```
 collectiq/
-├── backend/                 # FastAPI backend
+├── backend/                 # FastAPI backend (includes telephony)
 │   ├── app/
 │   │   ├── api/            # API endpoints
+│   │   │   └── v1/
+│   │   │       └── endpoints/
+│   │   │           ├── telephony.py   # Call/SMS endpoints
+│   │   │           └── ...
 │   │   ├── core/           # Config, security, database
 │   │   ├── models/         # SQLAlchemy models
 │   │   ├── schemas/        # Pydantic schemas
 │   │   ├── services/       # Business logic
+│   │   │   └── telephony/  # Telephony providers (Exotel, Mock)
 │   │   └── tasks/          # Celery tasks
 │   └── alembic/            # Database migrations
 ├── frontend/               # React frontend
@@ -101,12 +113,10 @@ collectiq/
 │       ├── stores/         # Zustand stores
 │       ├── services/       # API services
 │       └── hooks/          # Custom hooks
-├── ai_engine/              # AI/ML services
+├── ai_engine/              # AI/ML services (separate process)
 │   ├── voice/              # STT/TTS services
 │   ├── dialog/             # Dialog management
 │   └── realtime/           # Real-time voice pipeline
-├── telephony/              # Telephony service
-│   └── services/           # Call handling
 ├── scripts/                # Bash scripts
 ├── docs/                   # Documentation
 ├── logs/                   # Service logs
@@ -120,12 +130,11 @@ collectiq/
 | `./scripts/install.sh` | Install all dependencies |
 | `./scripts/setup_db.sh` | Create database and run migrations |
 | `./scripts/seed.sh` | Seed database with sample data |
-| `./scripts/start.sh` | Start all services |
+| `./scripts/start.sh` | Start all services (2 processes) |
 | `./scripts/stop.sh` | Stop all services |
-| `./scripts/start_backend.sh` | Start only backend API |
+| `./scripts/start_backend.sh` | Start backend API (includes telephony) |
 | `./scripts/start_frontend.sh` | Start only frontend |
 | `./scripts/start_ai.sh` | Start only AI engine |
-| `./scripts/start_telephony.sh` | Start only telephony service |
 | `./scripts/start_celery.sh` | Start Celery worker/beat |
 | `./scripts/migrate.sh` | Database migration commands |
 | `./scripts/test.sh` | Run tests |
@@ -148,3 +157,36 @@ Interactive API documentation is available at:
 | `POST /api/v1/communications/call` | Initiate a call |
 | `GET /api/v1/analytics/dashboard` | Dashboard metrics |
 | `POST /api/v1/campaigns` | Create campaign |
+
+### Telephony Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/v1/telephony/calls/initiate` | Initiate outbound call |
+| `GET /api/v1/telephony/calls/active` | List active calls |
+| `GET /api/v1/telephony/calls/{call_id}` | Get call details |
+| `POST /api/v1/telephony/calls/{call_id}/end` | End active call |
+| `POST /api/v1/telephony/sms/send` | Send SMS message |
+| `POST /api/v1/telephony/whatsapp/send` | Send WhatsApp message |
+| `GET /api/v1/telephony/provider/stats` | Provider statistics |
+| `GET /api/v1/telephony/provider/balance` | Account balance |
+| `POST /api/v1/telephony/webhook/exotel/status` | Exotel webhook |
+
+## Telephony Configuration
+
+The telephony service is integrated into the backend. Configure via environment variables:
+
+```bash
+# Provider selection
+TELEPHONY_PROVIDER=mock     # mock (development) or exotel (production)
+
+# Exotel credentials (for production)
+EXOTEL_API_KEY=your-api-key
+EXOTEL_API_TOKEN=your-api-token
+EXOTEL_SID=your-account-sid
+EXOTEL_CALLER_ID=+91XXXXXXXXXX
+EXOTEL_WEBHOOK_URL=https://your-domain.com/api/v1/telephony/webhook/exotel/status
+
+# AI Engine connection
+AI_ENGINE_URL=http://localhost:8001
+```

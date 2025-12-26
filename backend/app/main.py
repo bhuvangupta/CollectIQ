@@ -3,11 +3,40 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import structlog
 
 from app.core.config import settings
 from app.core.database import init_db
 from app.api.v1.router import api_router
+
+# Sensitive field names to redact from logs
+SENSITIVE_FIELDS = {
+    "password", "current_password", "new_password", "confirm_password",
+    "token", "access_token", "refresh_token", "api_key", "secret",
+    "authorization", "cookie", "credit_card", "ssn", "pan"
+}
+
+# Rate limiter - uses client IP address
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+
+
+def sanitize_error_data(errors: list) -> list:
+    """Sanitize validation errors to remove sensitive field values."""
+    sanitized = []
+    for error in errors:
+        error_copy = dict(error)
+        # Check if error is for a sensitive field
+        loc = error_copy.get("loc", [])
+        field_name = loc[-1] if loc else ""
+        if isinstance(field_name, str) and field_name.lower() in SENSITIVE_FIELDS:
+            # Redact the input value if present
+            if "input" in error_copy:
+                error_copy["input"] = "[REDACTED]"
+        sanitized.append(error_copy)
+    return sanitized
 
 
 # Configure structured logging
@@ -56,10 +85,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware
+# Attach rate limiter to app
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS middleware - origins configurable via CORS_ORIGINS env var
+cors_origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:80"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -73,16 +107,18 @@ async def validation_exception_handler(
     exc: RequestValidationError
 ):
     """Handle validation errors."""
+    # Sanitize errors to remove sensitive field values from logs
+    sanitized_errors = sanitize_error_data(exc.errors())
     logger.warning(
         "Validation error",
         path=request.url.path,
-        errors=exc.errors()
+        errors=sanitized_errors
     )
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "detail": "Validation error",
-            "errors": exc.errors()
+            "errors": exc.errors()  # Return full errors to client for debugging
         }
     )
 

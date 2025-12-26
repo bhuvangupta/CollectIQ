@@ -135,8 +135,8 @@ See [Exotel Integration](exotel.md) for detailed setup.
 |----------|-------------|---------|
 | `AI_ENGINE_HOST` | AI engine host | `localhost` |
 | `AI_ENGINE_PORT` | AI engine port | `8001` |
-| `TELEPHONY_HOST` | Telephony host | `localhost` |
-| `TELEPHONY_PORT` | Telephony port | `8002` |
+
+> **Note**: Telephony is integrated into the backend (port 8000). No separate service needed.
 
 ## Example .env File
 
