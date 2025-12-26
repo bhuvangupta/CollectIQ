@@ -6,6 +6,8 @@ An intelligent loan collection platform for Indian financial institutions, featu
 
 ![Architecture](docs/screenshots/architecture.png)
 
+![Layers](docs/screenshots/layers.png)
+
 ## Screenshots
 
 ### Dashboard
