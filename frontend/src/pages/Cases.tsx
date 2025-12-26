@@ -34,6 +34,7 @@ export default function Cases() {
   const [sortBy, setSortBy] = useState<string>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
+  const [loansUploadOpen, setLoansUploadOpen] = useState(false)
 
   const createCase = useCreateCase()
 
@@ -173,10 +174,26 @@ export default function Cases() {
           </p>
         </div>
         <div className="flex gap-2 self-start sm:self-auto">
-          <Button variant="secondary" onClick={() => setUploadModalOpen(true)}>
-            <ArrowUpTrayIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">Import</span>
-          </Button>
+          <div className="relative group">
+            <Button variant="secondary">
+              <ArrowUpTrayIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">Import</span>
+            </Button>
+            <div className="absolute right-0 mt-1 w-40 bg-white border border-light-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+              <button
+                onClick={() => setUploadModalOpen(true)}
+                className="w-full px-4 py-2 text-left text-sm text-light-700 hover:bg-light-50 rounded-t-lg"
+              >
+                Import Cases
+              </button>
+              <button
+                onClick={() => setLoansUploadOpen(true)}
+                className="w-full px-4 py-2 text-left text-sm text-light-700 hover:bg-light-50 rounded-b-lg"
+              >
+                Update Loans
+              </button>
+            </div>
+          </div>
           <Button onClick={() => setModalOpen(true)}>
             <PlusIcon className="h-4 w-4" />
             <span className="hidden sm:inline">Create Case</span>
@@ -459,6 +476,13 @@ export default function Cases() {
         isOpen={uploadModalOpen}
         onClose={() => setUploadModalOpen(false)}
         type="cases"
+      />
+
+      {/* Loans Upload Modal */}
+      <UploadModal
+        isOpen={loansUploadOpen}
+        onClose={() => setLoansUploadOpen(false)}
+        type="loans"
       />
     </div>
   )

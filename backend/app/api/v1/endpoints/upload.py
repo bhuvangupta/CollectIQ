@@ -728,6 +728,292 @@ async def bulk_create_cases(
 
 
 # =============================================================================
+# Loans Upload Endpoints
+# =============================================================================
+
+@router.post("/loans/upload", response_model=UploadResult)
+async def upload_loans_csv(
+    file: UploadFile = File(...),
+    update_existing: bool = Query(True, description="Update existing loans if found"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Upload loans via CSV file. Links to existing borrowers.
+
+    Use this for:
+    - Adding new loans to existing borrowers
+    - Daily updates of outstanding amounts, DPD, overdue amounts
+
+    CSV columns:
+    Borrower reference (use one):
+    - borrower_external_id: Your internal customer ID
+    - borrower_phone: Borrower's phone number
+
+    Loan details:
+    - loan_account_number (required): Loan account number
+    - loan_type (optional): personal, home, auto, business, credit_card
+    - principal_amount (required for new loans): Original loan amount
+    - emi_amount (required for new loans): Monthly EMI
+    - total_outstanding (required): Current outstanding
+    - overdue_amount (optional): Overdue amount
+    - dpd (optional): Days past due
+    - overdue_emis (optional): Number of overdue EMIs
+    - next_due_date (optional): Next EMI due date
+    - last_payment_date (optional): Last payment date
+    """
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+
+    org_id = current_user.organization_id
+    content = await file.read()
+
+    try:
+        decoded = content.decode('utf-8')
+    except UnicodeDecodeError:
+        decoded = content.decode('latin-1')
+
+    reader = csv.DictReader(io.StringIO(decoded))
+
+    created = 0
+    updated = 0
+    failed = 0
+    errors = []
+
+    for row_num, row in enumerate(reader, start=2):
+        try:
+            # Validate required fields
+            if not row.get('loan_account_number'):
+                raise ValueError("loan_account_number is required")
+
+            # Find borrower
+            borrower = None
+            if row.get('borrower_external_id'):
+                result = await db.execute(
+                    select(Borrower).where(
+                        Borrower.organization_id == org_id,
+                        Borrower.external_id == row['borrower_external_id']
+                    )
+                )
+                borrower = result.scalar_one_or_none()
+
+            if not borrower and row.get('borrower_phone'):
+                phone = normalize_phone(row['borrower_phone'])
+                result = await db.execute(
+                    select(Borrower).where(
+                        Borrower.organization_id == org_id,
+                        Borrower.primary_phone == phone
+                    )
+                )
+                borrower = result.scalar_one_or_none()
+
+            if not borrower:
+                raise ValueError("Borrower not found. Provide valid borrower_external_id or borrower_phone")
+
+            # Check if loan exists
+            result = await db.execute(
+                select(Loan).where(
+                    Loan.organization_id == org_id,
+                    Loan.loan_account_number == row['loan_account_number']
+                )
+            )
+            existing_loan = result.scalar_one_or_none()
+
+            if existing_loan:
+                if update_existing:
+                    # Update loan amounts
+                    if row.get('total_outstanding'):
+                        existing_loan.total_outstanding = parse_decimal(row['total_outstanding'])
+                    if row.get('overdue_amount'):
+                        existing_loan.overdue_amount = parse_decimal(row['overdue_amount'])
+                    if row.get('dpd'):
+                        existing_loan.dpd = parse_int(row['dpd'])
+                    if row.get('overdue_emis'):
+                        existing_loan.overdue_emis = parse_int(row['overdue_emis'])
+                    if row.get('next_due_date'):
+                        existing_loan.next_due_date = parse_date(row['next_due_date'])
+                    if row.get('last_payment_date'):
+                        existing_loan.last_payment_date = parse_date(row['last_payment_date'])
+                    existing_loan.update_bucket()
+                    updated += 1
+            else:
+                # Create new loan - require principal and emi
+                if not row.get('principal_amount'):
+                    raise ValueError("principal_amount is required for new loans")
+                if not row.get('emi_amount'):
+                    raise ValueError("emi_amount is required for new loans")
+
+                loan = Loan(
+                    organization_id=org_id,
+                    borrower_id=borrower.id,
+                    external_loan_id=row.get('external_loan_id'),
+                    loan_account_number=row['loan_account_number'],
+                    loan_type=row.get('loan_type', 'personal'),
+                    product_name=row.get('product_name'),
+                    principal_amount=parse_decimal(row['principal_amount']),
+                    emi_amount=parse_decimal(row['emi_amount']),
+                    interest_rate=parse_decimal(row.get('interest_rate')),
+                    tenure_months=parse_int(row.get('tenure_months')),
+                    disbursement_date=parse_date(row.get('disbursement_date')),
+                    total_outstanding=parse_decimal(row.get('total_outstanding')) or parse_decimal(row['principal_amount']),
+                    overdue_amount=parse_decimal(row.get('overdue_amount')) or Decimal('0'),
+                    dpd=parse_int(row.get('dpd')) or 0,
+                    overdue_emis=parse_int(row.get('overdue_emis')) or 0,
+                    next_due_date=parse_date(row.get('next_due_date')),
+                    last_payment_date=parse_date(row.get('last_payment_date')),
+                    status='active'
+                )
+                loan.update_bucket()
+                db.add(loan)
+                created += 1
+
+        except Exception as e:
+            failed += 1
+            errors.append({
+                "row": row_num,
+                "loan_account": row.get('loan_account_number', 'N/A'),
+                "error": str(e)
+            })
+
+    if created > 0 or updated > 0:
+        await db.commit()
+
+    return UploadResult(
+        success=failed == 0,
+        total_rows=created + updated + failed,
+        created=created,
+        updated=updated,
+        failed=failed,
+        errors=errors[:50]
+    )
+
+
+@router.post("/loans/bulk", response_model=UploadResult)
+async def bulk_create_loans(
+    request: BulkUploadRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Bulk create/update loans via JSON API.
+
+    Request body:
+    ```json
+    {
+        "items": [
+            {
+                "borrower_phone": "9876543210",
+                "loan_account_number": "LN001",
+                "loan_type": "personal",
+                "principal_amount": 100000,
+                "emi_amount": 5000,
+                "total_outstanding": 75000,
+                "overdue_amount": 15000,
+                "dpd": 45
+            }
+        ],
+        "update_existing": true
+    }
+    ```
+    """
+    org_id = current_user.organization_id
+
+    created = 0
+    updated = 0
+    failed = 0
+    errors = []
+
+    for idx, item in enumerate(request.items):
+        try:
+            if not item.get('loan_account_number'):
+                raise ValueError("loan_account_number is required")
+
+            # Find borrower
+            borrower = None
+            if item.get('borrower_external_id'):
+                result = await db.execute(
+                    select(Borrower).where(
+                        Borrower.organization_id == org_id,
+                        Borrower.external_id == item['borrower_external_id']
+                    )
+                )
+                borrower = result.scalar_one_or_none()
+
+            if not borrower and item.get('borrower_phone'):
+                phone = normalize_phone(item['borrower_phone'])
+                result = await db.execute(
+                    select(Borrower).where(
+                        Borrower.organization_id == org_id,
+                        Borrower.primary_phone == phone
+                    )
+                )
+                borrower = result.scalar_one_or_none()
+
+            if not borrower:
+                raise ValueError("Borrower not found")
+
+            # Check existing loan
+            result = await db.execute(
+                select(Loan).where(
+                    Loan.organization_id == org_id,
+                    Loan.loan_account_number == item['loan_account_number']
+                )
+            )
+            existing_loan = result.scalar_one_or_none()
+
+            if existing_loan:
+                if request.update_existing:
+                    if item.get('total_outstanding'):
+                        existing_loan.total_outstanding = parse_decimal(item['total_outstanding'])
+                    if item.get('overdue_amount'):
+                        existing_loan.overdue_amount = parse_decimal(item['overdue_amount'])
+                    if item.get('dpd'):
+                        existing_loan.dpd = parse_int(item['dpd'])
+                    if item.get('overdue_emis'):
+                        existing_loan.overdue_emis = parse_int(item['overdue_emis'])
+                    existing_loan.update_bucket()
+                    updated += 1
+            else:
+                if not item.get('principal_amount') or not item.get('emi_amount'):
+                    raise ValueError("principal_amount and emi_amount required for new loans")
+
+                loan = Loan(
+                    organization_id=org_id,
+                    borrower_id=borrower.id,
+                    loan_account_number=item['loan_account_number'],
+                    loan_type=item.get('loan_type', 'personal'),
+                    principal_amount=parse_decimal(item['principal_amount']),
+                    emi_amount=parse_decimal(item['emi_amount']),
+                    total_outstanding=parse_decimal(item.get('total_outstanding')) or parse_decimal(item['principal_amount']),
+                    overdue_amount=parse_decimal(item.get('overdue_amount')) or Decimal('0'),
+                    dpd=parse_int(item.get('dpd')) or 0,
+                    overdue_emis=parse_int(item.get('overdue_emis')) or 0,
+                    status='active'
+                )
+                loan.update_bucket()
+                db.add(loan)
+                created += 1
+
+        except Exception as e:
+            failed += 1
+            errors.append({
+                "index": idx,
+                "loan_account": item.get('loan_account_number', 'N/A'),
+                "error": str(e)
+            })
+
+    if created > 0 or updated > 0:
+        await db.commit()
+
+    return UploadResult(
+        success=failed == 0,
+        total_rows=len(request.items),
+        created=created,
+        updated=updated,
+        failed=failed,
+        errors=errors[:50]
+    )
+
+
+# =============================================================================
 # Template Download Endpoints
 # =============================================================================
 
@@ -758,6 +1044,42 @@ async def download_borrowers_template():
         iter([output.getvalue()]),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=borrowers_template.csv"}
+    )
+
+
+@router.get("/loans/template")
+async def download_loans_template():
+    """Download CSV template for loan upload/update."""
+    headers = [
+        "borrower_external_id", "borrower_phone",
+        "loan_account_number", "loan_type", "principal_amount", "emi_amount",
+        "total_outstanding", "overdue_amount", "dpd", "overdue_emis",
+        "next_due_date", "last_payment_date"
+    ]
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    # Sample rows - one new loan, one update
+    writer.writerow([
+        "CUST001", "9876543210",
+        "LN2024001", "personal", "500000", "15000",
+        "350000", "45000", "45", "3",
+        "2024-02-15", "2024-01-10"
+    ])
+    writer.writerow([
+        "", "9876543211",  # Using phone instead of external_id
+        "LN2024002", "home", "2000000", "25000",
+        "1800000", "75000", "60", "3",
+        "2024-02-20", ""
+    ])
+
+    from fastapi.responses import StreamingResponse
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=loans_template.csv"}
     )
 
 

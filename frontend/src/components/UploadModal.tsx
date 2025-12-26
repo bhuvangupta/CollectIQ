@@ -15,7 +15,7 @@ import toast from 'react-hot-toast'
 interface UploadModalProps {
   isOpen: boolean
   onClose: () => void
-  type: 'borrowers' | 'cases'
+  type: 'borrowers' | 'loans' | 'cases'
 }
 
 interface UploadResult {
@@ -128,10 +128,18 @@ export default function UploadModal({ isOpen, onClose, type }: UploadModalProps)
     onClose()
   }
 
-  const title = type === 'borrowers' ? 'Upload Borrowers' : 'Upload Cases'
-  const description = type === 'borrowers'
-    ? 'Upload borrower data from a CSV file'
-    : 'Upload cases with borrower and loan data from a CSV file'
+  const titles: Record<string, string> = {
+    borrowers: 'Upload Borrowers',
+    loans: 'Upload Loans',
+    cases: 'Upload Cases',
+  }
+  const descriptions: Record<string, string> = {
+    borrowers: 'Upload borrower data from a CSV file',
+    loans: 'Upload or update loan data (links to existing borrowers)',
+    cases: 'Upload cases with borrower and loan data from a CSV file',
+  }
+  const title = titles[type]
+  const description = descriptions[type]
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={title} size="lg">
