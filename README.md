@@ -167,3 +167,7 @@ Built-in RBI collection guideline compliance:
 ## License
 
 Apache License 2.0 - see [LICENSE](LICENSE)
+
+---
+
+> **Note**: This is a proof-of-concept project. Some features may not work as expected or may require additional configuration. Please test thoroughly in a development environment before any production use. Contributions and bug reports are welcome!
