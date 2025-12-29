@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/screenshots/logo-256.png" alt="CollectIQ Logo" width="128">
+</p>
+
 # CollectIQ - AI-Powered Loan Collection Platform
 
 An intelligent loan collection platform for Indian financial institutions, featuring AI voice bots, multi-channel communication, and comprehensive analytics.
