@@ -107,7 +107,8 @@ cd collectiq
 | Document | Description |
 |----------|-------------|
 | [User Guide](docs/user-guide.md) | Quick start for end users |
-| [Voice AI Providers](docs/voice-ai-providers.md) | Setup Bolna AI or ElevenLabs for automated calls |
+| [AI Engine](docs/ai-engine.md) | STT, TTS, LLM, and real-time voice pipeline |
+| [Voice AI Providers](docs/voice-ai-providers.md) | Setup Bolna AI or LiveKit for automated calls |
 | [Exotel Integration](docs/exotel.md) | Direct Exotel telephony for production calls |
 | [Sarvam AI](docs/sarvam-ai.md) | Indian language AI (STT, TTS, LLM) |
 | [Voice Demo](docs/voice-demo.md) | Browser-based voice testing guide |
